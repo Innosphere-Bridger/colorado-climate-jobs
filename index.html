@@ -444,51 +444,59 @@ function updateChoropleth(){
 }
 
 // ─── TRUE RASTER PIXEL OVERLAY ────────────────────────────────────────────
-// Each pixel [col, row, value] is projected to screen coords via D3,
-// then drawn as a filled rectangle at the correct geographic size.
+// Each pixel [col, row, value] from the raster JSON is projected to screen
+// coordinates using the same D3 Albers USA projection as the county map.
+// col_step and row_step are SIGNED — row_step may be positive (south-up tiff)
+// or negative (north-down tiff). Both are handled by the same formula.
 function renderTiffPixels(){
   const canvas=document.getElementById("tiff-canvas");
   const ctx=canvas.getContext("2d");
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   const rdata=STATE.rasterData[STATE.activeHazard?.id];
-  if (!rdata) return; // still loading — will auto-render when fetch resolves
+  if (!rdata) return;
 
   const sc=rdata.scenarios[STATE.activeGwl];
   if (!sc) return;
 
-  const {origin, pixel_size, pixels, extent} = sc;
-  const [originLon, originLat] = origin;
-  const [pxW, pxH] = pixel_size; // degrees per pixel
+  // Support both old format (pixel_size) and new format (col_step/row_step)
+  const originLon = sc.origin[0];
+  const originLat = sc.origin[1];
+  const colStep   = sc.col_step  ?? sc.pixel_size?.[0];   // degrees per column (positive)
+  const rowStep   = sc.row_step  ?? -(sc.pixel_size?.[1]); // degrees per row (signed)
 
+  if (!colStep || rowStep === undefined) {
+    console.error("Raster JSON missing col_step/row_step — re-run process_tiffs.py");
+    return;
+  }
+
+  const {pixels, extent} = sc;
   const htype=STATE.activeHazard.hazard_type;
   const colorFn=htype==="precip"?d3.scaleSequential(d3.interpolateYlGnBu).domain(extent)
                :htype==="wind"  ?d3.scaleSequential(d3.interpolatePuBu).domain(extent)
                :d3.scaleSequential(d3.interpolateYlOrRd).domain(extent);
 
-  // Project the four corners of one pixel to find screen pixel size
-  // (pixel size varies across the Albers projection)
-  // We'll compute per-pixel for accuracy — still only ~2600 iterations, very fast.
   pixels.forEach(([col, row, val]) => {
-    const lon0 = originLon + col * pxW;
-    const lat0 = originLat - row * pxH;       // top-left corner of pixel
-    const lon1 = lon0 + pxW;
-    const lat1 = lat0 - pxH;                  // bottom-right corner
+    // Top-left corner of this pixel in geographic coords
+    const lon0 = originLon + col * colStep;
+    const lat0 = originLat + row * rowStep;
+    // Bottom-right corner
+    const lon1 = lon0 + colStep;
+    const lat1 = lat0 + rowStep;
 
     const p0 = STATE.projection([lon0, lat0]);
     const p1 = STATE.projection([lon1, lat1]);
-    if (!p0 || !p1) return;                    // outside projection boundary
+    if (!p0 || !p1) return;
 
     const sx = Math.min(p0[0], p1[0]);
     const sy = Math.min(p0[1], p1[1]);
-    const sw = Math.abs(p1[0] - p0[0]) + 0.5; // +0.5 closes seams between pixels
+    const sw = Math.abs(p1[0] - p0[0]) + 0.5; // +0.5 closes seams
     const sh = Math.abs(p1[1] - p0[1]) + 0.5;
 
     ctx.fillStyle = colorFn(val);
     ctx.fillRect(sx, sy, sw, sh);
   });
 
-  // Update raster legend
   const stops=colorStops(htype);
   document.getElementById("tiff-legend-bar").style.background=`linear-gradient(to right,${stops.join(",")})`;
   document.getElementById("tleg-min").textContent=extent[0].toFixed(2);

@@ -180,16 +180,15 @@ def extract_pixels(tif_path, min_value=0.001):
     """
     Extract raster as pixel index array for browser rendering.
 
-    Returns dict with:
-      origin:     [left_lon, top_lat]   — geographic origin of the grid
-      pixel_size: [width_deg, height_deg]  — size of each pixel (both positive)
-      rows, cols: grid dimensions
-      pixels:     [[col, row, value], ...]  — only non-zero pixels
-      extent:     [min_val, max_val]
+    Stores the SIGNED row_step (t.e) so the browser handles both normal
+    north-down tiffs (t.e < 0) and inverted south-up tiffs (t.e > 0).
 
-    The browser reconstructs lon/lat:
-      lon = origin[0] + col * pixel_size[0]
-      lat = origin[1] - row * pixel_size[1]
+    Browser reconstructs the top-left corner of each pixel as:
+      lon0 = origin[0] + col * col_step
+      lat0 = origin[1] + row * row_step       <- row_step sign determines direction
+
+    Normal tiff (t.e < 0):  row 0 is north edge, rows go south  -> lat0 decreases
+    Inverted tiff (t.e > 0): row 0 is south edge, rows go north -> lat0 increases
     """
     if not tif_path.exists():
         print(f"  Skipping missing: {tif_path}", file=sys.stderr)
@@ -201,10 +200,10 @@ def extract_pixels(tif_path, min_value=0.001):
         if nodata is not None:
             data[data == nodata] = np.nan
 
-    rows, cols = data.shape
+    nrows, ncols = data.shape
     pixels, valid_vals = [], []
-    for r in range(rows):
-        for c in range(cols):
+    for r in range(nrows):
+        for c in range(ncols):
             v = data[r, c]
             if np.isnan(v) or v < min_value:
                 continue
@@ -215,9 +214,10 @@ def extract_pixels(tif_path, min_value=0.001):
         return None
 
     return {
-        "origin":     [round(t.c, 6), round(t.f, 6)],
-        "pixel_size": [round(t.a, 6), round(abs(t.e), 6)],
-        "rows": rows, "cols": cols,
+        "origin":   [round(t.c, 6), round(t.f, 6)],  # [left_lon, row-0 lat edge]
+        "col_step": round(t.a, 6),                    # degrees per column (always +)
+        "row_step": round(t.e, 6),                    # degrees per row (sign matters!)
+        "rows": nrows, "cols": ncols,
         "pixels": pixels,
         "extent": [round(min(valid_vals), 4), round(max(valid_vals), 4)],
     }
