@@ -41,9 +41,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 /* MAP — #center must be a positioned block with explicit height so absolute children aren't collapsed */
 #center{position:relative;overflow:hidden;width:100%;height:100%;min-height:0;}
-#choro-svg,#tiff-canvas,#outline-svg,#click-svg{position:absolute;top:0;left:0;width:100%;height:100%;}
-#tiff-canvas{pointer-events:none;opacity:0;transition:opacity 0.25s;image-rendering:pixelated;}
-#tiff-canvas.visible{opacity:0.72;}
+#choro-svg,#outline-svg,#click-svg{position:absolute;top:0;left:0;width:100%;height:100%;}
 #outline-svg{pointer-events:none;}
 #click-svg path{fill:transparent;stroke:transparent;cursor:pointer;}
 #outline-svg path{fill:none;stroke:rgba(255,255,255,0.25);stroke-width:0.6px;pointer-events:none;}
@@ -57,15 +55,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #legend-title{font-size:10px;color:var(--muted);margin-bottom:8px;letter-spacing:0.06em;text-transform:uppercase;}
 #legend-bar{width:160px;height:8px;border-radius:4px;margin-bottom:4px;}
 .legend-minmax{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
-
-#tiff-legend{position:absolute;bottom:20px;right:20px;display:none;background:rgba(15,17,23,0.9);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;backdrop-filter:blur(6px);}
-#tiff-legend.visible{display:block;}
-#tiff-legend-title{font-size:10px;color:var(--accent2);margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;}
-#tiff-legend-bar{width:140px;height:8px;border-radius:4px;margin-bottom:4px;}
-
-#overlay-controls{position:absolute;top:14px;right:14px;display:none;background:rgba(15,17,23,0.9);border:1px solid var(--border2);border-radius:var(--r);padding:8px 12px;backdrop-filter:blur(6px);font-size:11px;color:var(--muted);}
-#overlay-controls.visible{display:flex;align-items:center;gap:8px;}
-#opacity-slider{width:80px;accent-color:var(--accent2);}
 
 #tooltip{position:absolute;pointer-events:none;opacity:0;background:rgba(15,17,23,0.95);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;min-width:160px;font-size:12px;transition:opacity 0.1s;backdrop-filter:blur(8px);z-index:10;}
 .tt-name{font-family:var(--font-disp);font-size:15px;font-weight:300;margin-bottom:4px;}
@@ -182,7 +171,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <h1>Colorado <span>Climate Hazard</span> × Jobs</h1>
     <div class="header-sep"></div>
     <span class="header-hint">Select a hazard · choose a warming scenario · click a county</span>
-    <button class="hdr-btn" id="overlay-btn" onclick="toggleOverlay()">⬡ Show raw tiff overlay</button>
     <button class="hdr-btn" onclick="toggleMethodology()">? Methodology</button>
   </header>
 
@@ -206,29 +194,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <div id="center">
       <!-- Choropleth (county fills, shown when overlay off) -->
       <svg id="choro-svg" aria-label="Colorado county choropleth"></svg>
-      <!-- Raw tiff pixel canvas -->
-      <canvas id="tiff-canvas"></canvas>
       <!-- County outlines always on top -->
       <svg id="outline-svg"></svg>
       <!-- Invisible click layer -->
       <svg id="click-svg"></svg>
 
-      <div id="overlay-controls">
-        <span>opacity</span>
-        <input type="range" id="opacity-slider" min="10" max="95" value="72" step="1"
-          oninput="document.getElementById('tiff-canvas').style.opacity=this.value/100">
-      </div>
-
       <div id="legend">
         <div id="legend-title">value</div>
         <div id="legend-bar"></div>
         <div class="legend-minmax"><span id="leg-min">0</span><span id="leg-max">—</span></div>
-      </div>
-
-      <div id="tiff-legend">
-        <div id="tiff-legend-title">raw raster pixels</div>
-        <div id="tiff-legend-bar"></div>
-        <div class="legend-minmax"><span id="tleg-min">—</span><span id="tleg-max">—</span></div>
       </div>
 
       <div id="tooltip">
@@ -243,7 +217,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div id="county-placeholder">
           <strong>Click a county</strong>
           Hover the map to preview values. Click any county for a full sector breakdown.<br><br>
-          Use <span style="color:var(--accent2)">Show raw tiff overlay</span> to see the actual raster pixels from the source file rendered at full ~10km resolution.
+          Click any county to see a full breakdown of affected job sectors and exposure scores across all warming scenarios.
         </div>
       </div>
     </div>
@@ -254,8 +228,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 // ─── State ───────────────────────────────────────────────────────────────
 const STATE = {
   manifest:[], sectors:[], activeHazard:null, activeGwl:null,
-  hazardData:{}, rasterData:{}, selectedFips:null, countyGeo:null,
-  overlayOn:false, projection:null, geoPath:null,
+  hazardData:{}, selectedFips:null, countyGeo:null,
+  projection:null, geoPath:null,
 };
 const HAZARD_COLORS = {
   heat:        d3.scaleSequential(d3.interpolateYlOrRd),
@@ -282,19 +256,20 @@ async function boot() {
     await selectHazard(manifest[0]);
     document.getElementById("loading").style.display="none";
     document.getElementById("app").style.display="";
-    // IMPORTANT: syncCanvas must run after app is visible so getBoundingClientRect returns real dimensions
-    syncCanvas();
     // Re-fit projection now that #center has its real dimensions
     const el=document.getElementById("center");
     const w=el.offsetWidth, h=el.offsetHeight;
-    STATE.projection.fitSize([w,h],STATE.countyGeo);
+    STATE.projection
+      .rotate([105.55, 0])
+      .center([0, 39.0])
+      .parallels([37.5, 40.5])
+      .fitSize([w,h],STATE.countyGeo);
     STATE.geoPath=d3.geoPath(STATE.projection);
     [choroSel,outlineSel,clickSel].forEach(s=>{
       s.attr("viewBox",`0 0 ${w} ${h}`);
       s.selectAll("path").attr("d",STATE.geoPath);
     });
     updateChoropleth();
-    if (STATE.overlayOn) renderTiffPixels();
   } catch(e){document.querySelector("#loading p").textContent="Error loading data — see console.";console.error(e);}
 }
 
@@ -324,13 +299,6 @@ async function selectHazard(hazard){
   if (!STATE.hazardData[hazard.id]){
     STATE.hazardData[hazard.id]=await fetch(hazard.file).then(r=>r.json());
   }
-  // Prefetch raster in background
-  if (hazard.raster_file && !STATE.rasterData[hazard.id]){
-    fetch(hazard.raster_file).then(r=>r.json()).then(d=>{
-      STATE.rasterData[hazard.id]=d;
-      if (STATE.overlayOn && STATE.activeHazard.id===hazard.id) renderTiffPixels();
-    });
-  }
   const gwls=hazard.gwls; STATE.activeGwl=gwls[0];
   const gwlRow=document.getElementById("gwl-row"); gwlRow.innerHTML="";
   gwls.forEach(gwl=>{
@@ -342,7 +310,6 @@ async function selectHazard(hazard){
     gwlRow.appendChild(btn);
   });
   updateChoropleth();
-  if (STATE.overlayOn) renderTiffPixels();
   if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
 }
 
@@ -356,7 +323,6 @@ function selectGwl(gwl){
   STATE.activeGwl=gwl;
   document.querySelectorAll(".gwl-btn").forEach(b=>b.classList.toggle("active",b.dataset.gwl===gwl));
   updateChoropleth();
-  if (STATE.overlayOn) renderTiffPixels();
   if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
 }
 
@@ -365,10 +331,15 @@ let choroSel, outlineSel, clickSel;
 
 function initMap(){
   const el=document.getElementById("center");
-  // offsetWidth/Height work even when display:none parent; we'll resize properly after reveal
   const w=el.offsetWidth||window.innerWidth-560;
   const h=el.offsetHeight||window.innerHeight-52;
-  STATE.projection=d3.geoAlbersUsa().fitSize([w,h],STATE.countyGeo);
+  // Colorado-specific Albers Equal Area — removes the tilt from geoAlbersUsa
+  // Standard parallels and central meridian tuned for Colorado's bounding box
+  STATE.projection=d3.geoAlbers()
+    .rotate([105.55, 0])
+    .center([0, 39.0])
+    .parallels([37.5, 40.5])
+    .fitSize([w,h],STATE.countyGeo);
   STATE.geoPath=d3.geoPath(STATE.projection);
 
   // Choropleth fills
@@ -392,28 +363,21 @@ function initMap(){
     .attr("data-fips",d=>d.id.toString().padStart(5,"0"))
     .on("mousemove",onMouseMove).on("mouseleave",onMouseLeave).on("click",onCountyClick);
 
-  syncCanvas();
   window.addEventListener("resize",()=>{
     const w2=el.clientWidth, h2=el.clientHeight;
-    STATE.projection.fitSize([w2,h2],STATE.countyGeo);
+    STATE.projection
+      .rotate([105.55, 0])
+      .center([0, 39.0])
+      .parallels([37.5, 40.5])
+      .fitSize([w2,h2],STATE.countyGeo);
     STATE.geoPath=d3.geoPath(STATE.projection);
     [choroSel,outlineSel,clickSel].forEach(s=>{
       s.attr("viewBox",`0 0 ${w2} ${h2}`);
       s.selectAll("path").attr("d",STATE.geoPath);
     });
-    syncCanvas();
-    if (STATE.overlayOn) renderTiffPixels();
-  });
+    });
 }
 
-function syncCanvas(){
-  const el=document.getElementById("center");
-  const rect=el.getBoundingClientRect();
-  const c=document.getElementById("tiff-canvas");
-  // Use actual rendered pixel dimensions — clientWidth is 0 when parent was hidden during boot
-  c.width=Math.round(rect.width||el.offsetWidth);
-  c.height=Math.round(rect.height||el.offsetHeight);
-}
 
 // ─── Choropleth ───────────────────────────────────────────────────────────
 function countyValue(fips){
@@ -429,11 +393,10 @@ function updateChoropleth(){
   const vals=data.counties.map(c=>c.scenarios[STATE.activeGwl]).filter(v=>v!=null&&!isNaN(v)&&v>0);
   const ext=d3.extent(vals);
   const colorScale=(HAZARD_COLORS[STATE.activeHazard.hazard_type]||HAZARD_COLORS.heat).domain(ext);
-  const showChoro=!STATE.overlayOn;
   choroSel.selectAll("path").each(function(d){
     const fips=d.id.toString().padStart(5,"0"); const v=countyValue(fips);
     d3.select(this).classed("no-data",v==null)
-      .attr("fill",!showChoro?"transparent":(v==null?"var(--bg3)":colorScale(v)));
+      .attr("fill",v==null?"var(--bg3)":colorScale(v));
   });
   const stops=colorStops(STATE.activeHazard.hazard_type);
   document.getElementById("legend-bar").style.background=`linear-gradient(to right,${stops.join(",")})`;
@@ -443,86 +406,9 @@ function updateChoropleth(){
   document.getElementById("leg-max").textContent=(ext[1]!=null?ext[1].toFixed(2):"—")+" "+STATE.activeHazard.unit;
 }
 
-// ─── TRUE RASTER PIXEL OVERLAY ────────────────────────────────────────────
-// Each pixel [col, row, value] from the raster JSON is projected to screen
-// coordinates using the same D3 Albers USA projection as the county map.
-// col_step and row_step are SIGNED — row_step may be positive (south-up tiff)
-// or negative (north-down tiff). Both are handled by the same formula.
-function renderTiffPixels(){
-  const canvas=document.getElementById("tiff-canvas");
-  const ctx=canvas.getContext("2d");
-  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const rdata=STATE.rasterData[STATE.activeHazard?.id];
-  if (!rdata) return;
 
-  const sc=rdata.scenarios[STATE.activeGwl];
-  if (!sc) return;
 
-  // Support both old format (pixel_size) and new format (col_step/row_step)
-  const originLon = sc.origin[0];
-  const originLat = sc.origin[1];
-  const colStep   = sc.col_step  ?? sc.pixel_size?.[0];   // degrees per column (positive)
-  const rowStep   = sc.row_step  ?? -(sc.pixel_size?.[1]); // degrees per row (signed)
-
-  if (!colStep || rowStep === undefined) {
-    console.error("Raster JSON missing col_step/row_step — re-run process_tiffs.py");
-    return;
-  }
-
-  const {pixels, extent} = sc;
-  const htype=STATE.activeHazard.hazard_type;
-  const colorFn=htype==="precip"?d3.scaleSequential(d3.interpolateYlGnBu).domain(extent)
-               :htype==="wind"  ?d3.scaleSequential(d3.interpolatePuBu).domain(extent)
-               :d3.scaleSequential(d3.interpolateYlOrRd).domain(extent);
-
-  pixels.forEach(([col, row, val]) => {
-    // Top-left corner of this pixel in geographic coords
-    const lon0 = originLon + col * colStep;
-    const lat0 = originLat + row * rowStep;
-    // Bottom-right corner
-    const lon1 = lon0 + colStep;
-    const lat1 = lat0 + rowStep;
-
-    const p0 = STATE.projection([lon0, lat0]);
-    const p1 = STATE.projection([lon1, lat1]);
-    if (!p0 || !p1) return;
-
-    const sx = Math.min(p0[0], p1[0]);
-    const sy = Math.min(p0[1], p1[1]);
-    const sw = Math.abs(p1[0] - p0[0]) + 0.5; // +0.5 closes seams
-    const sh = Math.abs(p1[1] - p0[1]) + 0.5;
-
-    ctx.fillStyle = colorFn(val);
-    ctx.fillRect(sx, sy, sw, sh);
-  });
-
-  const stops=colorStops(htype);
-  document.getElementById("tiff-legend-bar").style.background=`linear-gradient(to right,${stops.join(",")})`;
-  document.getElementById("tleg-min").textContent=extent[0].toFixed(2);
-  document.getElementById("tleg-max").textContent=extent[1].toFixed(2);
-  document.getElementById("tiff-legend-title").textContent=`raw raster — ${STATE.activeHazard.unit}`;
-}
-
-// ─── Overlay toggle ───────────────────────────────────────────────────────
-function toggleOverlay(){
-  STATE.overlayOn=!STATE.overlayOn;
-  const btn=document.getElementById("overlay-btn");
-  const canvas=document.getElementById("tiff-canvas");
-  btn.classList.toggle("active",STATE.overlayOn);
-  btn.textContent=STATE.overlayOn?"⬡ Hide tiff overlay":"⬡ Show raw tiff overlay";
-  canvas.classList.toggle("visible",STATE.overlayOn);
-  document.getElementById("overlay-controls").classList.toggle("visible",STATE.overlayOn);
-  document.getElementById("tiff-legend").classList.toggle("visible",STATE.overlayOn);
-  // Show/hide county fills
-  updateChoropleth();
-  if (STATE.overlayOn){
-    if (STATE.rasterData[STATE.activeHazard?.id]) renderTiffPixels();
-    // else: prefetch in progress, will render on completion
-  } else {
-    const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,99999,99999);
-  }
-}
 
 // ─── Methodology ─────────────────────────────────────────────────────────
 function toggleMethodology(){document.getElementById("method-modal").classList.toggle("open");}

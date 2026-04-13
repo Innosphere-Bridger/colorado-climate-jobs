@@ -176,12 +176,11 @@ def zonal_mean(tif_path, geometry):
         return None
 
 
-def extract_pixels(tif_path, min_value=0.001):
+def extract_pixels(tif_path, min_value=-999):
     """
-    Extract raster as pixel index array for browser rendering.
-
-    Stores the SIGNED row_step (t.e) so the browser handles both normal
-    north-down tiffs (t.e < 0) and inverted south-up tiffs (t.e > 0).
+    Extract ALL valid (non-NaN, non-nodata) raster pixels for browser rendering.
+    min_value=-999 means include zeros and near-zeros — no holes in the overlay.
+    Use a higher min_value only if you want to mask out no-change areas.
 
     Browser reconstructs the top-left corner of each pixel as:
       lon0 = origin[0] + col * col_step
@@ -300,28 +299,10 @@ def process(geojson_path, tiff_root, out_dir):
                        "counties":counties}, f, separators=(",",":"))
         print(f"  Wrote {county_path.name} ({county_path.stat().st_size//1024} KB)")
 
-        # ── Raw pixel extraction ────────────────────────────────────────────
-        print(f"  Extracting raster pixels …")
-        raster_scenarios = {}
-        for sc in hazard["scenarios"]:
-            gwl = sc["gwl"]
-            pdata = extract_pixels(tiff_root / sc["file_pattern"])
-            if pdata:
-                raster_scenarios[gwl] = pdata
-                print(f"    {gwl}: {len(pdata['pixels'])} pixels  "
-                      f"range {pdata['extent'][0]:.2f}–{pdata['extent'][1]:.2f}")
-
-        raster_path = out_dir / f"{hid}_raster.json"
-        with open(raster_path, "w") as f:
-            json.dump({"id":hid,"unit":hazard["unit"],"hazard_type":hazard["hazard_type"],
-                       "scenarios":raster_scenarios}, f, separators=(",",":"))
-        print(f"  Wrote {raster_path.name} ({raster_path.stat().st_size//1024} KB)")
-
         manifest.append({
             "id": hid, "label": hazard["label"], "unit": hazard["unit"],
             "description": hazard["description"], "hazard_type": hazard["hazard_type"],
             "file": f"data/{hid}.json",
-            "raster_file": f"data/{hid}_raster.json",
             "gwls": [sc["gwl"] for sc in hazard["scenarios"]],
         })
 
