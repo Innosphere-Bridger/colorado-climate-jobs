@@ -424,8 +424,19 @@ function onMouseMove(event,d){
   document.getElementById("tt-name").textContent=county?.name||fips;
   document.getElementById("tt-val").textContent=v!=null?v.toFixed(3):"no data";
   document.getElementById("tt-unit").textContent=STATE.activeHazard?.unit||"";
+  // Show briefly invisible to measure width, then position
+  tt.style.opacity="0.01"; tt.style.left="0px"; tt.style.top="0px";
   const rect=document.getElementById("center").getBoundingClientRect();
-  tt.style.left=(event.clientX-rect.left+14)+"px"; tt.style.top=(event.clientY-rect.top-10)+"px";
+  const ttW=tt.offsetWidth||180;
+  const ttH=tt.offsetHeight||70;
+  const x=event.clientX-rect.left;
+  const y=event.clientY-rect.top;
+  // Flip left if tooltip would overflow into the right panel (leave 320px margin)
+  const flipX = x + ttW + 20 > rect.width - 310;
+  // Flip up if tooltip would overflow bottom
+  const flipY = y + ttH + 20 > rect.height;
+  tt.style.left = flipX ? (x - ttW - 10)+"px" : (x + 14)+"px";
+  tt.style.top  = flipY ? (y - ttH - 4)+"px"  : (y - 10)+"px";
   tt.style.opacity="1";
 }
 function onMouseLeave(){document.getElementById("tooltip").style.opacity="0";}
