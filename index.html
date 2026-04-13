@@ -8,13 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg:#0f1117; --bg2:#171b26; --bg3:#1e2433;
-  --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.13);
-  --text:#e8eaf0; --muted:#7a8099;
-  --accent:#c8f060; --accent2:#60c8f0;
-  --font-sans:'DM Mono',monospace; --font-disp:'Fraunces',serif; --r:6px;
-}
+:root{--bg:#0f1117;--bg2:#171b26;--bg3:#1e2433;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);--text:#e8eaf0;--muted:#7a8099;--accent:#c8f060;--accent2:#60c8f0;--font-sans:'DM Mono',monospace;--font-disp:'Fraunces',serif;--r:6px;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:13px;}
 #app{display:grid;grid-template-rows:52px 1fr;height:100vh;}
@@ -47,28 +41,45 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 /* MAP */
 #center{position:relative;overflow:hidden;}
-#map-svg{width:100%;height:100%;display:block;}
-#tiff-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.3s;}
-#tiff-canvas.visible{opacity:0.6;}
-#map-svg path.county{stroke:var(--bg);stroke-width:0.5px;cursor:pointer;transition:stroke-width 0.1s;}
-#map-svg path.county:hover{stroke-width:1.5px;}
-#map-svg path.county.selected{stroke:var(--accent);stroke-width:2px;}
-#legend{position:absolute;bottom:20px;left:20px;background:rgba(15,17,23,0.88);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;backdrop-filter:blur(6px);}
+#map-svg{position:absolute;top:0;left:0;width:100%;height:100%;}
+#tiff-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.25s;image-rendering:pixelated;}
+#tiff-canvas.visible{opacity:0.72;}
+/* county outlines sit on top of both */
+#outline-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+/* click layer for counties */
+#click-svg{position:absolute;top:0;left:0;width:100%;height:100%;}
+#click-svg path{fill:transparent;stroke:transparent;cursor:pointer;}
+#click-svg path:hover~#outline-svg path{stroke-width:2px;}
+
+/* outlines */
+#outline-svg path{fill:none;stroke:rgba(255,255,255,0.25);stroke-width:0.6px;pointer-events:none;}
+#outline-svg path.selected{stroke:var(--accent);stroke-width:2px;}
+
+/* choropleth layer (shown when overlay is OFF) */
+#choro-svg{position:absolute;top:0;left:0;width:100%;height:100%;}
+#choro-svg path{stroke:var(--bg);stroke-width:0.5px;cursor:pointer;transition:opacity 0.1s;}
+#choro-svg path:hover{opacity:0.8;}
+#choro-svg path.selected{stroke:var(--accent);stroke-width:2px;}
+#choro-svg path.no-data{fill:var(--bg3);}
+
+#legend{position:absolute;bottom:20px;left:20px;background:rgba(15,17,23,0.9);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;backdrop-filter:blur(6px);}
 #legend-title{font-size:10px;color:var(--muted);margin-bottom:8px;letter-spacing:0.06em;text-transform:uppercase;}
 #legend-bar{width:160px;height:8px;border-radius:4px;margin-bottom:4px;}
 .legend-minmax{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);}
-#tiff-legend{position:absolute;bottom:20px;right:20px;display:none;background:rgba(15,17,23,0.88);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;backdrop-filter:blur(6px);}
+
+#tiff-legend{position:absolute;bottom:20px;right:20px;display:none;background:rgba(15,17,23,0.9);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;backdrop-filter:blur(6px);}
 #tiff-legend.visible{display:block;}
 #tiff-legend-title{font-size:10px;color:var(--accent2);margin-bottom:6px;letter-spacing:0.06em;text-transform:uppercase;}
 #tiff-legend-bar{width:140px;height:8px;border-radius:4px;margin-bottom:4px;}
-#overlay-controls{position:absolute;top:14px;right:14px;display:none;background:rgba(15,17,23,0.88);border:1px solid var(--border2);border-radius:var(--r);padding:8px 12px;backdrop-filter:blur(6px);font-size:11px;color:var(--muted);}
+
+#overlay-controls{position:absolute;top:14px;right:14px;display:none;background:rgba(15,17,23,0.9);border:1px solid var(--border2);border-radius:var(--r);padding:8px 12px;backdrop-filter:blur(6px);font-size:11px;color:var(--muted);}
 #overlay-controls.visible{display:flex;align-items:center;gap:8px;}
 #opacity-slider{width:80px;accent-color:var(--accent2);}
-#tooltip{position:absolute;pointer-events:none;opacity:0;background:rgba(15,17,23,0.95);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;min-width:160px;font-size:12px;transition:opacity 0.1s;backdrop-filter:blur(8px);}
-#tooltip .tt-name{font-family:var(--font-disp);font-size:15px;font-weight:300;margin-bottom:4px;}
-#tooltip .tt-val{color:var(--accent);font-size:16px;font-weight:500;}
-#tooltip .tt-unit{color:var(--muted);font-size:10px;}
-.no-data{fill:var(--bg3);}
+
+#tooltip{position:absolute;pointer-events:none;opacity:0;background:rgba(15,17,23,0.95);border:1px solid var(--border2);border-radius:var(--r);padding:10px 14px;min-width:160px;font-size:12px;transition:opacity 0.1s;backdrop-filter:blur(8px);z-index:10;}
+.tt-name{font-family:var(--font-disp);font-size:15px;font-weight:300;margin-bottom:4px;}
+.tt-val{color:var(--accent);font-size:16px;font-weight:500;}
+.tt-unit{color:var(--muted);font-size:10px;}
 
 /* RIGHT */
 #right{border-left:1px solid var(--border);overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:16px;}
@@ -80,7 +91,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .stat-card .sc-val{font-size:18px;font-weight:500;color:var(--text);line-height:1;}
 .stat-card .sc-unit{font-size:10px;color:var(--muted);margin-top:2px;}
 .scenario-track{display:flex;border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;}
-.sc-seg{flex:1;padding:6px 4px;text-align:center;font-size:10px;color:var(--muted);border-right:1px solid var(--border);}
+.sc-seg{flex:1;padding:6px 4px;text-align:center;font-size:10px;border-right:1px solid var(--border);}
 .sc-seg:last-child{border-right:none;}
 .sc-seg .sc-gwl{font-size:9px;color:var(--muted);margin-bottom:2px;}
 .sc-seg .sc-num{font-size:12px;color:var(--text);}
@@ -102,7 +113,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #method-box h2{font-family:var(--font-disp);font-weight:300;font-size:26px;margin-bottom:6px;}
 #method-box h3{font-family:var(--font-disp);font-weight:300;font-size:17px;color:var(--accent);margin:24px 0 8px;}
 #method-box p{color:var(--muted);font-size:12px;line-height:1.85;margin-bottom:8px;}
-.formula-box{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px 18px;margin:10px 0;font-size:13px;color:var(--accent2);letter-spacing:0.02em;}
+.formula-box{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px 18px;margin:10px 0;font-size:13px;color:var(--accent2);}
 .m-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:8px;}
 .m-table th{text-align:left;color:var(--muted);font-weight:400;padding:6px 8px;border-bottom:1px solid var(--border2);font-size:10px;text-transform:uppercase;letter-spacing:0.06em;}
 .m-table td{padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;line-height:1.5;}
@@ -131,13 +142,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <div id="method-box">
   <button class="close-btn" onclick="toggleMethodology()">close ✕</button>
   <h2>Methodology</h2>
-  <p style="color:var(--muted);font-size:13px;margin-top:4px;">How this dashboard calculates climate exposure and job risk — and how we decided what counts as low risk.</p>
+  <p style="color:var(--muted);font-size:13px;margin-top:4px;">How climate exposure is calculated and how job sector risk is determined.</p>
 
-  <h3>1. Climate data source</h3>
-  <p>Each layer comes from a regional climate model ensemble producing GeoTIFF raster files for Colorado. The value shown per county is the <strong style="color:var(--text)">spatial mean of all raster pixels within that county's boundary</strong> — a zonal statistics operation run in Python using rasterio and geopandas. Files named <em>minus_REF</em> show the <strong style="color:var(--text)">change from a historical baseline (~1980–2010)</strong>, not an absolute value. So a county showing "3.2 additional days" of WBGT >80°F means 3.2 more dangerous heat-stress days per year than that county saw historically.</p>
+  <h3>1. Climate data & raster overlay</h3>
+  <p>Each layer is a GeoTIFF raster file at ~10km resolution (0.09° grid cells). When you enable the <strong style="color:var(--accent2)">raw tiff overlay</strong>, the actual pixel values from the source file are drawn directly onto the map — every grid cell is rendered at its true geographic position and size using the D3 Albers USA projection. This is not averaged or smoothed — it is the exact data from the file.</p>
+  <p>The county choropleth (shown without the overlay) uses the <strong style="color:var(--text)">spatial mean of all pixels within each county boundary</strong> — a zonal statistics operation run in Python using rasterio and geopandas. Files named <em>minus_REF</em> show the <strong style="color:var(--text)">change from a historical baseline (~1980–2010)</strong>, not an absolute value.</p>
 
   <h3>2. Warming scenarios (Global Warming Levels)</h3>
-  <p>Rather than calendar years, scenarios are expressed as how many degrees Celsius above pre-industrial the global mean temperature has risen. This makes projections robust across different emissions pathways.</p>
   <table class="m-table">
     <tr><th>Scenario</th><th>Meaning</th><th>Approximate year</th></tr>
     <tr><td>+1.1°C</td><td>Current observed warming — today's baseline</td><td>~now (2020s)</td></tr>
@@ -146,103 +157,32 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <tr><td>+2.5°C</td><td>High-emission trajectory</td><td>~2060–2070</td></tr>
   </table>
 
-  <h3>3. How exposure scores are calculated</h3>
-  <p>Each sector is assigned an <strong style="color:var(--text)">outdoor exposure weight</strong> — the estimated share of workers in that sector who perform work outdoors or in conditions directly affected by the selected weather hazard. Multiplying employment by this weight gives "exposed workers." Multiplying again by the county's hazard change value produces a dimensionless exposure score used to rank sectors.</p>
+  <h3>3. Exposure score formula</h3>
   <div class="formula-box">exposure_score = county_jobs × outdoor_weight × hazard_change_value</div>
-  <p>The bar charts in the county panel show exposed workers (jobs × outdoor weight). The score is for ranking only — it is not a prediction of job losses.</p>
+  <p>Each sector has an outdoor exposure weight — the estimated fraction of workers performing work outdoors or in conditions directly affected by the hazard. The bar charts show exposed workers (jobs × weight). The score is a relative index for ranking, not a forecast of job losses.</p>
 
   <h3>4. Sector weights & what "low risk" means</h3>
-  <p>A sector is marked <strong style="color:var(--text)">greyed out / low risk</strong> when the selected hazard type has no meaningful pathway to affect that sector's workers directly. For example, Finance & Insurance is greyed out for all hazards — office workers face essentially no direct weather exposure. Retail is greyed out for wind and precipitation but shown as relevant for heat (outdoor markets, garden centers, delivery). This does <em>not</em> mean these sectors have zero economic exposure to climate change — supply chain, infrastructure, and consumer-spending effects are real but are not captured here. This tool focuses on <strong style="color:var(--text)">direct worker exposure only.</strong></p>
+  <p>A sector is greyed out when the selected hazard type has no meaningful direct pathway to affect that sector's workers. This does <em>not</em> mean zero economic impact — supply chain, infrastructure, and consumer-spending effects are real but not captured here. This tool focuses on <strong style="color:var(--text)">direct worker exposure only.</strong></p>
   <table class="m-table" style="margin-top:12px;">
     <tr><th></th><th>Sector</th><th>Outdoor weight</th><th>Relevant hazards</th><th>Rationale</th></tr>
-    <tr>
-      <td><span class="dot-s" style="background:#3B6D11"></span></td>
-      <td>Agriculture, Forestry & Hunting</td><td class="ow">92%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
-      <td>Nearly all work is outdoors in direct sun. Highest heat-stress risk of any sector per OSHA data. Hail and high winds directly damage crops and disrupt field operations.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#854F0B"></span></td>
-      <td>Mining, Quarrying & Oil/Gas</td><td class="ow">80%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
-      <td>Extraction operations are predominantly outdoor. Equipment and worker safety affected by extreme heat and high winds. Colorado's oil/gas workers are often in remote, fully exposed locations.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#D85A30"></span></td>
-      <td>Construction</td><td class="ow">78%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
-      <td>OSHA data shows construction has the highest rate of heat illness of any US industry. Rain and wind directly cause work stoppages. High winds create safety hazards on elevated structures.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#185FA5"></span></td>
-      <td>Transportation & Warehousing</td><td class="ow">55%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
-      <td>Drivers and loaders work outdoors or in non-climate-controlled environments. Ice, wind, and extreme heat all affect road safety and delivery reliability.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#533AB7"></span></td>
-      <td>Utilities</td><td class="ow">50%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
-      <td>Line workers, meter readers, and maintenance crews work outdoors. Heat simultaneously increases grid demand and elevates worker heat-stress risk.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#993556"></span></td>
-      <td>Arts, Entertainment & Recreation</td><td class="ow">45%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
-      <td>Colorado's ski resorts, outdoor venues, trails, and parks make this sector especially weather-sensitive. Warming directly threatens the snow economy and outdoor recreation season lengths.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#374151"></span></td>
-      <td>Government (Federal/State/Local)</td><td class="ow">20–30%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
-      <td>Parks workers, road crews, emergency services, and mail carriers are exposed. Office-based government work is not. Local government weight is higher due to public works and utilities.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#0F6E56"></span></td>
-      <td>Manufacturing</td><td class="ow">30%</td>
-      <td><span class="tag th">heat</span></td>
-      <td>Loading docks and some production floors are not climate-controlled. Heat reduces worker productivity. Wind and precipitation have limited direct effect on most manufacturing.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#9CA3AF"></span></td>
-      <td>Admin, Support & Waste Management</td><td class="ow">25%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
-      <td>Waste collectors, landscapers, and facility maintenance workers are exposed. The admin majority works indoors.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#BA7517"></span></td>
-      <td>Accommodation & Food Services</td><td class="ow">22%</td>
-      <td><span class="tag th">heat</span><span class="tag tp">precip</span></td>
-      <td>Outdoor dining, resort operations, and delivery workers are exposed. Most kitchen and hotel work is indoors. Extreme heat can suppress outdoor dining revenue and tourist visits.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#2563EB"></span></td>
-      <td>Retail Trade</td><td class="ow">15%</td>
-      <td><span class="tag th">heat</span></td>
-      <td>Garden centers, outdoor markets, and delivery staff face exposure. Most retail is conducted in climate-controlled stores. Greyed out for wind and precipitation hazards.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#0891B2"></span></td>
-      <td>Educational Services</td><td class="ow">10%</td>
-      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
-      <td>Outdoor PE, recess, and sports coaching involve heat exposure. Extreme weather can cause school closures. Most instruction is indoors.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#7C3AED"></span></td>
-      <td>Health Care & Social Assistance</td><td class="ow">8%</td>
-      <td><span class="tag th">heat</span></td>
-      <td>Primarily indoor. Some home health and community workers travel. Heat increases patient demand rather than directly exposing most healthcare workers.</td>
-    </tr>
-    <tr>
-      <td><span class="dot-s" style="background:#6B7280"></span></td>
-      <td>Finance, Insurance, Real Estate, Professional Services, Information</td><td class="ow">3–12%</td>
-      <td>—</td>
-      <td>Office-based sectors with minimal direct weather exposure. Shown greyed out for all hazard types. Real estate agents and field inspectors carry minor outdoor exposure but do not move the aggregate meaningfully.</td>
-    </tr>
+    <tr><td><span class="dot-s" style="background:#3B6D11"></span></td><td>Agriculture, Forestry & Hunting</td><td class="ow">92%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Nearly all work is outdoors in direct sun. Highest heat-stress risk per OSHA. Hail and wind directly damage crops.</td></tr>
+    <tr><td><span class="dot-s" style="background:#854F0B"></span></td><td>Mining, Quarrying & Oil/Gas</td><td class="ow">80%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Extraction is predominantly outdoor. Equipment and worker safety affected by extreme heat and high winds.</td></tr>
+    <tr><td><span class="dot-s" style="background:#D85A30"></span></td><td>Construction</td><td class="ow">78%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>OSHA data: highest heat illness rate of any US industry. Rain and wind cause work stoppages.</td></tr>
+    <tr><td><span class="dot-s" style="background:#185FA5"></span></td><td>Transportation & Warehousing</td><td class="ow">55%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Drivers and loaders in non-climate-controlled environments. Ice and wind affect road safety.</td></tr>
+    <tr><td><span class="dot-s" style="background:#533AB7"></span></td><td>Utilities</td><td class="ow">50%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Line workers and maintenance crews work outdoors. Heat increases grid demand and worker risk simultaneously.</td></tr>
+    <tr><td><span class="dot-s" style="background:#993556"></span></td><td>Arts, Entertainment & Recreation</td><td class="ow">45%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Ski resorts, trails, and outdoor venues. Colorado's recreation economy is highly weather-sensitive.</td></tr>
+    <tr><td><span class="dot-s" style="background:#374151"></span></td><td>Government (all levels)</td><td class="ow">20–30%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Parks workers, road crews, and emergency services are exposed. Office-based government is not.</td></tr>
+    <tr><td><span class="dot-s" style="background:#0F6E56"></span></td><td>Manufacturing</td><td class="ow">30%</td><td><span class="tag th">heat</span></td><td>Loading docks and some production floors are not climate-controlled. Wind/precip have limited direct effect.</td></tr>
+    <tr><td><span class="dot-s" style="background:#9CA3AF"></span></td><td>Admin & Waste Management</td><td class="ow">25%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Waste collectors and landscapers are exposed. Admin majority works indoors.</td></tr>
+    <tr><td><span class="dot-s" style="background:#BA7517"></span></td><td>Food & Hospitality</td><td class="ow">22%</td><td><span class="tag th">heat</span><span class="tag tp">precip</span></td><td>Outdoor dining and resort operations exposed. Most kitchen and hotel work is indoors.</td></tr>
+    <tr><td><span class="dot-s" style="background:#2563EB"></span></td><td>Retail Trade</td><td class="ow">15%</td><td><span class="tag th">heat</span></td><td>Garden centers, outdoor markets, delivery staff. Most retail is climate-controlled.</td></tr>
+    <tr><td><span class="dot-s" style="background:#0891B2"></span></td><td>Educational Services</td><td class="ow">10%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Outdoor PE and sports coaching. Most instruction is indoors.</td></tr>
+    <tr><td><span class="dot-s" style="background:#7C3AED"></span></td><td>Health Care</td><td class="ow">8%</td><td><span class="tag th">heat</span></td><td>Primarily indoor. Heat increases patient demand rather than directly exposing most workers.</td></tr>
+    <tr><td><span class="dot-s" style="background:#6B7280"></span></td><td>Finance, Insurance, Real Estate, Professional, Information</td><td class="ow">3–12%</td><td>—</td><td>Office-based. Greyed out for all hazards. Minor outdoor exposure does not move the aggregate.</td></tr>
   </table>
 
-  <h3>5. Limitations & caveats</h3>
-  <p>Outdoor weights are sector-level averages — they do not capture variation within sectors (greenhouse agriculture vs. field crops; indoor vs. outdoor construction phases). Employment data is from BLS QCEW and may undercount informal and seasonal workers, who often face the highest exposure. The exposure score is a relative index for comparison across counties and sectors — it is <strong style="color:var(--text)">not a forecast of job losses or economic damage</strong>. Users should treat sector weights as starting-point estimates and refine them with local knowledge and domain expertise.</p>
+  <h3>5. Limitations</h3>
+  <p>Outdoor weights are sector-level averages. Employment from BLS QCEW may undercount informal and seasonal workers. The exposure score is a relative index for comparison — not a forecast of job losses or economic damage. Treat sector weights as starting-point estimates to be refined with local expertise.</p>
 </div>
 </div>
 
@@ -267,17 +207,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       </div>
       <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);">
         <div class="panel-label">About this hazard</div>
-        <p style="color:var(--muted);font-size:11px;line-height:1.7;" id="hazard-desc">Select a hazard to see its description.</p>
+        <p style="color:var(--muted);font-size:11px;line-height:1.7;" id="hazard-desc"></p>
       </div>
     </div>
 
     <div id="center">
-      <svg id="map-svg" aria-label="Colorado county map showing climate hazard intensity"></svg>
+      <!-- Choropleth (county fills, shown when overlay off) -->
+      <svg id="choro-svg" aria-label="Colorado county choropleth"></svg>
+      <!-- Raw tiff pixel canvas -->
       <canvas id="tiff-canvas"></canvas>
+      <!-- County outlines always on top -->
+      <svg id="outline-svg"></svg>
+      <!-- Invisible click layer -->
+      <svg id="click-svg"></svg>
 
       <div id="overlay-controls">
-        <span>overlay opacity</span>
-        <input type="range" id="opacity-slider" min="10" max="90" value="60" step="5"
+        <span>opacity</span>
+        <input type="range" id="opacity-slider" min="10" max="95" value="72" step="1"
           oninput="document.getElementById('tiff-canvas').style.opacity=this.value/100">
       </div>
 
@@ -288,7 +234,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       </div>
 
       <div id="tiff-legend">
-        <div id="tiff-legend-title">raw raster values</div>
+        <div id="tiff-legend-title">raw raster pixels</div>
         <div id="tiff-legend-bar"></div>
         <div class="legend-minmax"><span id="tleg-min">—</span><span id="tleg-max">—</span></div>
       </div>
@@ -305,7 +251,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <div id="county-placeholder">
           <strong>Click a county</strong>
           Hover the map to preview values. Click any county for a full sector breakdown.<br><br>
-          Use <span style="color:var(--accent2)">Show raw tiff overlay</span> to see raster data directly on the map, and <span style="color:var(--accent2)">? Methodology</span> to understand how exposure is calculated.
+          Use <span style="color:var(--accent2)">Show raw tiff overlay</span> to see the actual raster pixels from the source file rendered at full ~10km resolution.
         </div>
       </div>
     </div>
@@ -313,10 +259,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 </div>
 
 <script>
+// ─── State ───────────────────────────────────────────────────────────────
 const STATE = {
   manifest:[], sectors:[], activeHazard:null, activeGwl:null,
-  hazardData:{}, selectedFips:null, countyGeo:null,
-  overlayOn:false, projection:null,
+  hazardData:{}, rasterData:{}, selectedFips:null, countyGeo:null,
+  overlayOn:false, projection:null, geoPath:null,
 };
 const HAZARD_COLORS = {
   heat:        d3.scaleSequential(d3.interpolateYlOrRd),
@@ -324,9 +271,11 @@ const HAZARD_COLORS = {
   precip:      d3.scaleSequential(d3.interpolateYlGnBu),
   wind:        d3.scaleSequential(d3.interpolatePuBu),
 };
-const HTYPE_LABELS = {heat:"Heat",extreme_heat:"Extreme Heat",precip:"Precipitation",wind:"Wind & Hail"};
-const HTYPE_COLORS = {heat:"#f09060",extreme_heat:"#f06060",precip:"#60d4b8",wind:"#60a8f0"};
+const HTYPE_LABELS={heat:"Heat",extreme_heat:"Extreme Heat",precip:"Precipitation",wind:"Wind & Hail"};
+const HTYPE_COLORS={heat:"#f09060",extreme_heat:"#f06060",precip:"#60d4b8",wind:"#60a8f0"};
+function colorStops(h){return h==="precip"?["#e0f3db","#43a2ca","#0868ac"]:h==="wind"?["#f1eef6","#74a9cf","#034e7b"]:["#ffffb2","#fd8d3c","#bd0026"];}
 
+// ─── Boot ─────────────────────────────────────────────────────────────────
 async function boot() {
   try {
     const [manifest,sectors,topo] = await Promise.all([
@@ -335,16 +284,17 @@ async function boot() {
       fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json").then(r=>r.json()),
     ]);
     STATE.manifest=manifest; STATE.sectors=sectors;
-    const allC = topojson.feature(topo,topo.objects.counties);
+    const allC=topojson.feature(topo,topo.objects.counties);
     STATE.countyGeo={type:"FeatureCollection",features:allC.features.filter(f=>f.id.toString().startsWith("08"))};
     buildHazardList(); initMap();
     await selectHazard(manifest[0]);
     document.getElementById("loading").style.display="none";
     document.getElementById("app").style.display="";
-  } catch(e) { document.querySelector("#loading p").textContent="Error loading data — see console."; console.error(e); }
+  } catch(e){document.querySelector("#loading p").textContent="Error loading data — see console.";console.error(e);}
 }
 
-function buildHazardList() {
+// ─── Hazard list ──────────────────────────────────────────────────────────
+function buildHazardList(){
   const groups={};
   STATE.manifest.forEach(h=>{(groups[h.hazard_type]=groups[h.hazard_type]||[]).push(h);});
   const container=document.getElementById("hazard-list"); container.innerHTML="";
@@ -361,13 +311,20 @@ function buildHazardList() {
   });
 }
 
-async function selectHazard(hazard) {
+// ─── Select hazard / GWL ─────────────────────────────────────────────────
+async function selectHazard(hazard){
   STATE.activeHazard=hazard;
   document.querySelectorAll(".hazard-btn").forEach(b=>b.classList.toggle("active",b.dataset.id===hazard.id));
   document.getElementById("hazard-desc").textContent=hazard.description||"";
-  if (!STATE.hazardData[hazard.id]) {
-    const d=await fetch(hazard.file).then(r=>r.json());
-    STATE.hazardData[hazard.id]=d;
+  if (!STATE.hazardData[hazard.id]){
+    STATE.hazardData[hazard.id]=await fetch(hazard.file).then(r=>r.json());
+  }
+  // Prefetch raster in background
+  if (hazard.raster_file && !STATE.rasterData[hazard.id]){
+    fetch(hazard.raster_file).then(r=>r.json()).then(d=>{
+      STATE.rasterData[hazard.id]=d;
+      if (STATE.overlayOn && STATE.activeHazard.id===hazard.id) renderTiffPixels();
+    });
   }
   const gwls=hazard.gwls; STATE.activeGwl=gwls[0];
   const gwlRow=document.getElementById("gwl-row"); gwlRow.innerHTML="";
@@ -377,39 +334,60 @@ async function selectHazard(hazard) {
     btn.textContent=`+${gwl}°C`; btn.onclick=()=>selectGwl(gwl);
     gwlRow.appendChild(btn);
   });
-  updateMap();
-  if (STATE.overlayOn) renderTiffOverlay();
+  updateChoropleth();
+  if (STATE.overlayOn) renderTiffPixels();
   if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
 }
 
-function selectGwl(gwl) {
+function selectGwl(gwl){
   STATE.activeGwl=gwl;
   document.querySelectorAll(".gwl-btn").forEach(b=>b.classList.toggle("active",b.textContent===`+${gwl}°C`));
-  updateMap();
-  if (STATE.overlayOn) renderTiffOverlay();
+  updateChoropleth();
+  if (STATE.overlayOn) renderTiffPixels();
   if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
 }
 
-let path, svg, gCounties;
+// ─── Map init ─────────────────────────────────────────────────────────────
+let choroSel, outlineSel, clickSel;
 
-function initMap() {
-  svg=d3.select("#map-svg");
+function initMap(){
   const el=document.getElementById("center");
-  STATE.projection=d3.geoAlbersUsa().fitSize([el.clientWidth,el.clientHeight],STATE.countyGeo);
-  path=d3.geoPath(STATE.projection);
-  gCounties=svg.append("g");
-  gCounties.selectAll("path.county").data(STATE.countyGeo.features).join("path")
-    .attr("class","county no-data").attr("d",path)
+  const w=el.clientWidth, h=el.clientHeight;
+  STATE.projection=d3.geoAlbersUsa().fitSize([w,h],STATE.countyGeo);
+  STATE.geoPath=d3.geoPath(STATE.projection);
+
+  // Choropleth fills
+  choroSel=d3.select("#choro-svg");
+  choroSel.attr("viewBox",`0 0 ${w} ${h}`);
+  choroSel.selectAll("path").data(STATE.countyGeo.features).join("path")
+    .attr("class","no-data").attr("d",STATE.geoPath)
+    .attr("data-fips",d=>d.id.toString().padStart(5,"0"));
+
+  // Outlines (always visible)
+  outlineSel=d3.select("#outline-svg");
+  outlineSel.attr("viewBox",`0 0 ${w} ${h}`);
+  outlineSel.selectAll("path").data(STATE.countyGeo.features).join("path")
+    .attr("d",STATE.geoPath).attr("data-fips",d=>d.id.toString().padStart(5,"0"));
+
+  // Click targets
+  clickSel=d3.select("#click-svg");
+  clickSel.attr("viewBox",`0 0 ${w} ${h}`);
+  clickSel.selectAll("path").data(STATE.countyGeo.features).join("path")
+    .attr("d",STATE.geoPath)
     .attr("data-fips",d=>d.id.toString().padStart(5,"0"))
     .on("mousemove",onMouseMove).on("mouseleave",onMouseLeave).on("click",onCountyClick);
+
   syncCanvas();
   window.addEventListener("resize",()=>{
-    const w=el.clientWidth,h=el.clientHeight;
-    STATE.projection.fitSize([w,h],STATE.countyGeo);
-    path=d3.geoPath(STATE.projection);
-    gCounties.selectAll("path.county").attr("d",path);
+    const w2=el.clientWidth, h2=el.clientHeight;
+    STATE.projection.fitSize([w2,h2],STATE.countyGeo);
+    STATE.geoPath=d3.geoPath(STATE.projection);
+    [choroSel,outlineSel,clickSel].forEach(s=>{
+      s.attr("viewBox",`0 0 ${w2} ${h2}`);
+      s.selectAll("path").attr("d",STATE.geoPath);
+    });
     syncCanvas();
-    if (STATE.overlayOn) renderTiffOverlay();
+    if (STATE.overlayOn) renderTiffPixels();
   });
 }
 
@@ -418,30 +396,25 @@ function syncCanvas(){
   c.width=el.clientWidth; c.height=el.clientHeight;
 }
 
+// ─── Choropleth ───────────────────────────────────────────────────────────
 function countyValue(fips){
-  if (!STATE.activeHazard||!STATE.hazardData[STATE.activeHazard.id]) return null;
-  const county=STATE.hazardData[STATE.activeHazard.id].counties.find(c=>c.fips===fips);
-  if (!county) return null;
+  const data=STATE.hazardData[STATE.activeHazard?.id]; if (!data) return null;
+  const county=data.counties.find(c=>c.fips===fips); if (!county) return null;
   const v=county.scenarios[STATE.activeGwl];
   return (v==null||isNaN(v))?null:v;
 }
 
-function colorStops(htype){
-  return htype==="precip"?["#e0f3db","#43a2ca","#0868ac"]:htype==="wind"?["#f1eef6","#74a9cf","#034e7b"]:["#ffffb2","#fd8d3c","#bd0026"];
-}
-
-function updateMap(){
-  if (!gCounties) return;
+function updateChoropleth(){
+  if (!choroSel) return;
   const data=STATE.hazardData[STATE.activeHazard?.id]; if (!data) return;
   const vals=data.counties.map(c=>c.scenarios[STATE.activeGwl]).filter(v=>v!=null&&!isNaN(v)&&v>0);
   const ext=d3.extent(vals);
   const colorScale=(HAZARD_COLORS[STATE.activeHazard.hazard_type]||HAZARD_COLORS.heat).domain(ext);
-  gCounties.selectAll("path.county").each(function(d){
+  const showChoro=!STATE.overlayOn;
+  choroSel.selectAll("path").each(function(d){
     const fips=d.id.toString().padStart(5,"0"); const v=countyValue(fips);
     d3.select(this).classed("no-data",v==null)
-      .attr("fill",STATE.overlayOn?"transparent":(v==null?"var(--bg3)":colorScale(v)))
-      .attr("stroke",STATE.overlayOn?"rgba(255,255,255,0.2)":"var(--bg)")
-      .attr("stroke-width",STATE.overlayOn?"0.5":"0.5px");
+      .attr("fill",!showChoro?"transparent":(v==null?"var(--bg3)":colorScale(v)));
   });
   const stops=colorStops(STATE.activeHazard.hazard_type);
   document.getElementById("legend-bar").style.background=`linear-gradient(to right,${stops.join(",")})`;
@@ -450,32 +423,60 @@ function updateMap(){
   document.getElementById("leg-max").textContent=ext[1]!=null?ext[1].toFixed(2):"—";
 }
 
-function renderTiffOverlay(){
+// ─── TRUE RASTER PIXEL OVERLAY ────────────────────────────────────────────
+// Each pixel [col, row, value] is projected to screen coords via D3,
+// then drawn as a filled rectangle at the correct geographic size.
+function renderTiffPixels(){
   const canvas=document.getElementById("tiff-canvas");
-  const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,canvas.width,canvas.height);
-  const data=STATE.hazardData[STATE.activeHazard?.id]; if (!data) return;
-  const vals=data.counties.map(c=>c.scenarios[STATE.activeGwl]).filter(v=>v!=null&&!isNaN(v));
-  const ext=d3.extent(vals); if (ext[0]==null) return;
+  const ctx=canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const rdata=STATE.rasterData[STATE.activeHazard?.id];
+  if (!rdata) return; // still loading — will auto-render when fetch resolves
+
+  const sc=rdata.scenarios[STATE.activeGwl];
+  if (!sc) return;
+
+  const {origin, pixel_size, pixels, extent} = sc;
+  const [originLon, originLat] = origin;
+  const [pxW, pxH] = pixel_size; // degrees per pixel
+
   const htype=STATE.activeHazard.hazard_type;
-  const colorFn=htype==="precip"?d3.scaleSequential(d3.interpolateYlGnBu).domain(ext)
-               :htype==="wind"  ?d3.scaleSequential(d3.interpolatePuBu).domain(ext)
-               :d3.scaleSequential(d3.interpolateYlOrRd).domain(ext);
-  STATE.countyGeo.features.forEach(feature=>{
-    const fips=feature.id.toString().padStart(5,"0");
-    const county=data.counties.find(c=>c.fips===fips);
-    if (!county) return;
-    const v=county.scenarios[STATE.activeGwl];
-    if (v==null||isNaN(v)) return;
-    const p2d=new Path2D(path(feature));
-    ctx.fillStyle=colorFn(v); ctx.fill(p2d);
+  const colorFn=htype==="precip"?d3.scaleSequential(d3.interpolateYlGnBu).domain(extent)
+               :htype==="wind"  ?d3.scaleSequential(d3.interpolatePuBu).domain(extent)
+               :d3.scaleSequential(d3.interpolateYlOrRd).domain(extent);
+
+  // Project the four corners of one pixel to find screen pixel size
+  // (pixel size varies across the Albers projection)
+  // We'll compute per-pixel for accuracy — still only ~2600 iterations, very fast.
+  pixels.forEach(([col, row, val]) => {
+    const lon0 = originLon + col * pxW;
+    const lat0 = originLat - row * pxH;       // top-left corner of pixel
+    const lon1 = lon0 + pxW;
+    const lat1 = lat0 - pxH;                  // bottom-right corner
+
+    const p0 = STATE.projection([lon0, lat0]);
+    const p1 = STATE.projection([lon1, lat1]);
+    if (!p0 || !p1) return;                    // outside projection boundary
+
+    const sx = Math.min(p0[0], p1[0]);
+    const sy = Math.min(p0[1], p1[1]);
+    const sw = Math.abs(p1[0] - p0[0]) + 0.5; // +0.5 closes seams between pixels
+    const sh = Math.abs(p1[1] - p0[1]) + 0.5;
+
+    ctx.fillStyle = colorFn(val);
+    ctx.fillRect(sx, sy, sw, sh);
   });
+
+  // Update raster legend
   const stops=colorStops(htype);
   document.getElementById("tiff-legend-bar").style.background=`linear-gradient(to right,${stops.join(",")})`;
-  document.getElementById("tleg-min").textContent=ext[0].toFixed(2);
-  document.getElementById("tleg-max").textContent=ext[1].toFixed(2);
-  document.getElementById("tiff-legend-title").textContent=`raster: ${STATE.activeHazard.unit}`;
+  document.getElementById("tleg-min").textContent=extent[0].toFixed(2);
+  document.getElementById("tleg-max").textContent=extent[1].toFixed(2);
+  document.getElementById("tiff-legend-title").textContent=`raw raster — ${STATE.activeHazard.unit}`;
 }
 
+// ─── Overlay toggle ───────────────────────────────────────────────────────
 function toggleOverlay(){
   STATE.overlayOn=!STATE.overlayOn;
   const btn=document.getElementById("overlay-btn");
@@ -485,18 +486,23 @@ function toggleOverlay(){
   canvas.classList.toggle("visible",STATE.overlayOn);
   document.getElementById("overlay-controls").classList.toggle("visible",STATE.overlayOn);
   document.getElementById("tiff-legend").classList.toggle("visible",STATE.overlayOn);
-  updateMap();
-  if (STATE.overlayOn) renderTiffOverlay();
-  else { const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,99999,99999); }
+  // Show/hide county fills
+  updateChoropleth();
+  if (STATE.overlayOn){
+    if (STATE.rasterData[STATE.activeHazard?.id]) renderTiffPixels();
+    // else: prefetch in progress, will render on completion
+  } else {
+    const ctx=canvas.getContext("2d"); ctx.clearRect(0,0,99999,99999);
+  }
 }
 
-function toggleMethodology(){
-  document.getElementById("method-modal").classList.toggle("open");
-}
+// ─── Methodology ─────────────────────────────────────────────────────────
+function toggleMethodology(){document.getElementById("method-modal").classList.toggle("open");}
 document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("method-modal").addEventListener("click",function(e){if(e.target===this)toggleMethodology();});
 });
 
+// ─── Mouse events ─────────────────────────────────────────────────────────
 function onMouseMove(event,d){
   const fips=d.id.toString().padStart(5,"0"); const v=countyValue(fips);
   const county=STATE.hazardData[STATE.activeHazard?.id]?.counties.find(c=>c.fips===fips);
@@ -511,10 +517,12 @@ function onMouseMove(event,d){
 function onMouseLeave(){document.getElementById("tooltip").style.opacity="0";}
 function onCountyClick(event,d){
   const fips=d.id.toString().padStart(5,"0"); STATE.selectedFips=fips;
-  gCounties.selectAll("path.county").classed("selected",f=>f.id.toString().padStart(5,"0")===fips);
+  outlineSel.selectAll("path").classed("selected",f=>f.id.toString().padStart(5,"0")===fips);
+  choroSel.selectAll("path").classed("selected",f=>f.id.toString().padStart(5,"0")===fips);
   renderCountyDetail(fips);
 }
 
+// ─── County detail ────────────────────────────────────────────────────────
 function renderCountyDetail(fips){
   const data=STATE.hazardData[STATE.activeHazard?.id]; if (!data) return;
   const county=data.counties.find(c=>c.fips===fips); if (!county) return;
@@ -525,8 +533,7 @@ function renderCountyDetail(fips){
     return `<div class="sc-seg"><div class="sc-gwl">+${g}°C</div>
       <div class="sc-num" style="color:${g===gwl?'var(--accent)':'var(--text)'}">${v!=null?v.toFixed(2):'—'}</div></div>`;
   }).join("");
-  const sectorRows=STATE.sectors
-    .filter(s=>county.sectors[s.key])
+  const sectorRows=STATE.sectors.filter(s=>county.sectors[s.key])
     .map(s=>({...s,...county.sectors[s.key]}))
     .sort((a,b)=>{if(a.relevant!==b.relevant)return b.relevant-a.relevant;return b.exposed-a.exposed;});
   const maxExposed=Math.max(...sectorRows.filter(s=>s.relevant).map(s=>s.exposed),1);
@@ -559,7 +566,7 @@ function renderCountyDetail(fips){
       </div>
       <div class="panel-label" style="margin-bottom:6px">Jobs by sector exposure</div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px">
-        Bar = outdoor-exposed workers · greyed = low relevance for this hazard ·
+        Bar = outdoor-exposed workers · greyed = low relevance ·
         <a href="#" onclick="toggleMethodology();return false;" style="color:var(--accent2);text-decoration:none;">methodology ↗</a>
       </div>
       <div>${sectorHTML}</div>
