@@ -1,0 +1,112 @@
+[
+  {
+    "id": "wbgt",
+    "label": "Heat Stress (WBGT >80\u00b0F)",
+    "unit": "additional days/yr",
+    "description": "Change in days per year where Wet Bulb Globe Temperature exceeds 80\u00b0F. Directly affects outdoor workers.",
+    "hazard_type": "heat",
+    "file": "data/wbgt.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "tx90f",
+    "label": "Extreme Heat Days (>90\u00b0F)",
+    "unit": "additional days/yr",
+    "description": "Change in days per year with max temperature above 90\u00b0F.",
+    "hazard_type": "extreme_heat",
+    "file": "data/tx90f.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "tx95f",
+    "label": "Severe Heat Days (>95\u00b0F)",
+    "unit": "additional days/yr",
+    "description": "Change in days per year with max temperature above 95\u00b0F.",
+    "hazard_type": "extreme_heat",
+    "file": "data/tx95f.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "txn65f",
+    "label": "Warm Nights (>65\u00b0F)",
+    "unit": "additional nights/yr",
+    "description": "Change in nights per year where minimum temperature stays above 65\u00b0F. Affects worker recovery and sleep.",
+    "hazard_type": "heat",
+    "file": "data/txn65f.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "rx1day",
+    "label": "Extreme Precipitation (1-day max)",
+    "unit": "mm change",
+    "description": "Change in maximum 1-day precipitation. Affects flooding, infrastructure, and outdoor work disruption.",
+    "hazard_type": "precip",
+    "file": "data/rx1day.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "rx5day",
+    "label": "Extreme Precipitation (5-day max)",
+    "unit": "mm change",
+    "description": "Change in maximum 5-day cumulative precipitation. Indicator for sustained flooding risk.",
+    "hazard_type": "precip",
+    "file": "data/rx5day.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "wind_ann",
+    "label": "Extreme Wind (Annual 95th pct.)",
+    "unit": "m/s",
+    "description": "95th percentile annual maximum 10m wind speed. Affects outdoor operations, construction, and utilities.",
+    "hazard_type": "wind",
+    "file": "data/wind_ann.json",
+    "gwls": [
+      "1.1",
+      "1.5",
+      "2.0",
+      "2.5"
+    ]
+  },
+  {
+    "id": "hail",
+    "label": "Hail Days (MAMJJAS season)",
+    "unit": "days/yr",
+    "description": "Total hail days during MAMJJAS season. Affects agriculture, construction, and outdoor infrastructure.",
+    "hazard_type": "wind",
+    "file": "data/hail.json",
+    "gwls": [
+      "CTL",
+      "PGW"
+    ]
+  }
+]

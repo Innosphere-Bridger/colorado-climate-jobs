@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colorado Climate Hazard × Jobs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #0f1117;
+  --bg2:       #171b26;
+  --bg3:       #1e2433;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --text:      #e8eaf0;
+  --muted:     #7a8099;
+  --accent:    #c8f060;
+  --accent2:   #60c8f0;
+  --heat:      #f06060;
+  --wind:      #60a8f0;
+  --precip:    #60d4b8;
+  --font-sans: 'DM Mono', monospace;
+  --font-disp: 'Fraunces', serif;
+  --r:         6px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; }
+
+/* ── Layout ──────────────────────────────────────────── */
+#app { display: grid; grid-template-rows: 52px 1fr; height: 100vh; }
+#header { display: flex; align-items: center; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); }
+#header h1 { font-family: var(--font-disp); font-weight: 300; font-size: 19px; color: var(--text); letter-spacing: -0.02em; white-space: nowrap; }
+#header h1 span { color: var(--accent); font-style: italic; }
+.header-sep { width: 1px; height: 24px; background: var(--border2); }
+
+#body { display: grid; grid-template-columns: 260px 1fr 300px; overflow: hidden; }
+
+/* ── Left panel ───────────────────────────────────────── */
+#left { border-right: 1px solid var(--border); overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+.panel-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+/* Hazard selector */
+.hazard-group { margin-bottom: 4px; }
+.hazard-group-name { font-size: 10px; letter-spacing: 0.08em; color: var(--muted); padding: 4px 8px 2px; }
+.hazard-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 10px; border-radius: var(--r);
+  border: 1px solid transparent; background: transparent;
+  color: var(--text); cursor: pointer; text-align: left; font-family: var(--font-sans); font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.hazard-btn:hover { background: var(--bg3); border-color: var(--border2); }
+.hazard-btn.active { background: var(--bg3); border-color: var(--border2); }
+.hazard-btn.active .hb-dot { box-shadow: 0 0 6px currentColor; }
+.hb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hb-text { flex: 1; line-height: 1.3; }
+.hb-unit { font-size: 10px; color: var(--muted); }
+
+/* GWL selector */
+.gwl-row { display: flex; gap: 4px; }
+.gwl-btn {
+  flex: 1; padding: 5px 4px; border-radius: var(--r); border: 1px solid var(--border2);
+  background: transparent; color: var(--muted); cursor: pointer; font-family: var(--font-sans); font-size: 11px;
+  transition: all 0.15s; text-align: center;
+}
+.gwl-btn:hover { border-color: var(--border2); color: var(--text); }
+.gwl-btn.active { background: var(--accent); border-color: var(--accent); color: #0f1117; font-weight: 500; }
+
+/* ── Map panel ────────────────────────────────────────── */
+#center { position: relative; overflow: hidden; }
+#map-svg { width: 100%; height: 100%; display: block; }
+#map-svg path.county {
+  stroke: var(--bg); stroke-width: 0.5px; cursor: pointer;
+  transition: stroke-width 0.1s, opacity 0.1s;
+}
+#map-svg path.county:hover { stroke-width: 1.5px; opacity: 0.85; }
+#map-svg path.county.selected { stroke: var(--accent); stroke-width: 2px; }
+
+/* Legend */
+#legend {
+  position: absolute; bottom: 20px; left: 20px;
+  background: rgba(15,17,23,0.88); border: 1px solid var(--border2);
+  border-radius: var(--r); padding: 10px 14px; backdrop-filter: blur(6px);
+}
+#legend-title { font-size: 10px; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.06em; text-transform: uppercase; }
+#legend-bar { width: 160px; height: 8px; border-radius: 4px; margin-bottom: 4px; }
+.legend-minmax { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+
+/* Tooltip */
+#tooltip {
+  position: absolute; pointer-events: none; opacity: 0;
+  background: rgba(15,17,23,0.95); border: 1px solid var(--border2);
+  border-radius: var(--r); padding: 10px 14px; min-width: 160px;
+  font-size: 12px; transition: opacity 0.1s;
+  backdrop-filter: blur(8px);
+}
+#tooltip .tt-name { font-family: var(--font-disp); font-size: 15px; font-weight: 300; margin-bottom: 4px; }
+#tooltip .tt-val { color: var(--accent); font-size: 16px; font-weight: 500; }
+#tooltip .tt-unit { color: var(--muted); font-size: 10px; }
+
+/* No data fill */
+.no-data { fill: var(--bg3); }
+
+/* ── Right panel ──────────────────────────────────────── */
+#right { border-left: 1px solid var(--border); overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 16px; }
+#county-placeholder { color: var(--muted); font-size: 12px; line-height: 1.7; padding: 20px 0; }
+#county-placeholder strong { display: block; font-family: var(--font-disp); font-size: 18px; font-weight: 300; color: var(--text); margin-bottom: 8px; }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-card { background: var(--bg3); border-radius: var(--r); padding: 10px 12px; border: 1px solid var(--border); }
+.stat-card .sc-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.04em; }
+.stat-card .sc-val { font-size: 18px; font-weight: 500; color: var(--text); line-height: 1; }
+.stat-card .sc-unit { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+/* Scenario track */
+.scenario-track { display: flex; gap: 0; border: 1px solid var(--border2); border-radius: var(--r); overflow: hidden; }
+.sc-seg { flex: 1; padding: 6px 4px; text-align: center; font-size: 10px; color: var(--muted); border-right: 1px solid var(--border); cursor: default; }
+.sc-seg:last-child { border-right: none; }
+.sc-seg .sc-gwl { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+.sc-seg .sc-num { font-size: 12px; color: var(--text); }
+
+/* Sector bars */
+.sector-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+.sector-row:last-child { border-bottom: none; }
+.sector-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sector-name { flex: 1; color: var(--text); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sector-bar-bg { width: 60px; height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
+.sector-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.sector-exposed { font-size: 11px; color: var(--muted); min-width: 42px; text-align: right; }
+.sector-irrelevant { opacity: 0.35; }
+
+/* Loading */
+#loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; z-index: 100; }
+#loading p { font-family: var(--font-disp); font-size: 22px; font-weight: 300; color: var(--muted); font-style: italic; }
+.spinner { width: 28px; height: 28px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* Responsive hint */
+@media (max-width: 900px) { #body { grid-template-columns: 1fr; } #left, #right { display: none; } }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p>Loading hazard data…</p></div>
+
+<div id="app" style="display:none;">
+  <header id="header">
+    <h1>Colorado <span>Climate Hazard</span> × Jobs</h1>
+    <div class="header-sep"></div>
+    <span style="color:var(--muted);font-size:11px;">Select a hazard · choose a warming scenario · click a county</span>
+  </header>
+
+  <div id="body">
+    <!-- LEFT: hazard + scenario controls -->
+    <div id="left">
+      <div>
+        <div class="panel-label">Climate Hazard</div>
+        <div id="hazard-list"></div>
+      </div>
+      <div>
+        <div class="panel-label">Warming Scenario</div>
+        <div class="gwl-row" id="gwl-row"></div>
+      </div>
+      <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);">
+        <div class="panel-label">About</div>
+        <p style="color:var(--muted);font-size:11px;line-height:1.7;" id="hazard-desc">Select a hazard to see its description.</p>
+      </div>
+    </div>
+
+    <!-- CENTER: map -->
+    <div id="center">
+      <svg id="map-svg" aria-label="Colorado county map showing climate hazard intensity"></svg>
+      <div id="legend">
+        <div id="legend-title">value</div>
+        <div id="legend-bar"></div>
+        <div class="legend-minmax"><span id="leg-min">0</span><span id="leg-max">—</span></div>
+      </div>
+      <div id="tooltip">
+        <div class="tt-name" id="tt-name"></div>
+        <div class="tt-val" id="tt-val"></div>
+        <div class="tt-unit" id="tt-unit"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: county detail -->
+    <div id="right">
+      <div id="county-detail">
+        <div id="county-placeholder">
+          <strong>Click a county</strong>
+          Hover the map to preview values. Click any county to see the full breakdown of affected job sectors.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const STATE = {
+  manifest: [],
+  sectors: [],
+  activeHazard: null,   // manifest entry
+  activeGwl: null,
+  hazardData: {},       // cached { hazardId: parsed JSON }
+  selectedFips: null,
+  countyGeo: null,      // topojson features
+};
+
+const HAZARD_COLORS = {
+  heat:         d3.scaleSequential(d3.interpolateYlOrRd),
+  extreme_heat: d3.scaleSequential(d3.interpolateOrRd),
+  precip:       d3.scaleSequential(d3.interpolateYlGnBu),
+  wind:         d3.scaleSequential(d3.interpolatePuBu),
+};
+
+// ─────────────────────────────────────────────
+// Boot
+// ─────────────────────────────────────────────
+async function boot() {
+  try {
+    const [manifest, sectors, topo] = await Promise.all([
+      fetch("data/manifest.json").then(r => r.json()),
+      fetch("data/sectors.json").then(r => r.json()),
+      fetch("https://cdn.jsdelivr.net/npm/us-atlas@3/counties-10m.json").then(r => r.json()),
+    ]);
+
+    STATE.manifest = manifest;
+    STATE.sectors  = sectors;
+
+    // filter to Colorado counties (FIPS 08xxx)
+    const allCounties = topojson.feature(topo, topo.objects.counties);
+    STATE.countyGeo = {
+      type: "FeatureCollection",
+      features: allCounties.features.filter(f => f.id.toString().startsWith("08")),
+    };
+
+    buildHazardList();
+    initMap();
+
+    // select first hazard automatically
+    const firstHazard = manifest[0];
+    await selectHazard(firstHazard);
+
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("app").style.display = "";
+  } catch (err) {
+    document.querySelector("#loading p").textContent = "Error loading data — see console.";
+    console.error(err);
+  }
+}
+
+// ─────────────────────────────────────────────
+// Hazard list builder
+// ─────────────────────────────────────────────
+const HAZARD_TYPE_LABELS = { heat: "Heat", extreme_heat: "Extreme Heat", precip: "Precipitation", wind: "Wind & Hail" };
+const HAZARD_TYPE_COLORS = { heat: "#f09060", extreme_heat: "#f06060", precip: "#60d4b8", wind: "#60a8f0" };
+
+function buildHazardList() {
+  const groups = {};
+  STATE.manifest.forEach(h => {
+    const g = h.hazard_type;
+    (groups[g] = groups[g] || []).push(h);
+  });
+  const container = document.getElementById("hazard-list");
+  container.innerHTML = "";
+  Object.entries(groups).forEach(([type, hazards]) => {
+    const grp = document.createElement("div");
+    grp.className = "hazard-group";
+    grp.innerHTML = `<div class="hazard-group-name">${HAZARD_TYPE_LABELS[type] || type}</div>`;
+    hazards.forEach(h => {
+      const btn = document.createElement("button");
+      btn.className = "hazard-btn";
+      btn.dataset.id = h.id;
+      btn.innerHTML = `<span class="hb-dot" style="background:${HAZARD_TYPE_COLORS[h.hazard_type]||'#aaa'}"></span>
+        <span class="hb-text">${h.label}<br><span class="hb-unit">${h.unit}</span></span>`;
+      btn.onclick = () => selectHazard(h);
+      grp.appendChild(btn);
+    });
+    container.appendChild(grp);
+  });
+}
+
+// ─────────────────────────────────────────────
+// Select hazard
+// ─────────────────────────────────────────────
+async function selectHazard(hazard) {
+  STATE.activeHazard = hazard;
+  document.querySelectorAll(".hazard-btn").forEach(b => b.classList.toggle("active", b.dataset.id === hazard.id));
+  document.getElementById("hazard-desc").textContent = hazard.description || "";
+
+  // load data if not cached
+  if (!STATE.hazardData[hazard.id]) {
+    const d = await fetch(hazard.file).then(r => r.json());
+    STATE.hazardData[hazard.id] = d;
+  }
+
+  // build GWL buttons
+  const gwls = hazard.gwls;
+  STATE.activeGwl = gwls[0];
+  const gwlRow = document.getElementById("gwl-row");
+  gwlRow.innerHTML = "";
+  gwls.forEach(gwl => {
+    const btn = document.createElement("button");
+    btn.className = "gwl-btn" + (gwl === STATE.activeGwl ? " active" : "");
+    btn.textContent = `+${gwl}°C`;
+    btn.onclick = () => selectGwl(gwl);
+    gwlRow.appendChild(btn);
+  });
+
+  updateMap();
+  if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
+}
+
+function selectGwl(gwl) {
+  STATE.activeGwl = gwl;
+  document.querySelectorAll(".gwl-btn").forEach(b => b.classList.toggle("active", b.textContent === `+${gwl}°C`));
+  updateMap();
+  if (STATE.selectedFips) renderCountyDetail(STATE.selectedFips);
+}
+
+// ─────────────────────────────────────────────
+// Map
+// ─────────────────────────────────────────────
+let path, svg, gCounties;
+
+function initMap() {
+  svg = d3.select("#map-svg");
+  const w = document.getElementById("center").clientWidth;
+  const h = document.getElementById("center").clientHeight;
+  const projection = d3.geoAlbersUsa().fitSize([w, h], STATE.countyGeo);
+  path = d3.geoPath(projection);
+  gCounties = svg.append("g");
+
+  gCounties.selectAll("path.county")
+    .data(STATE.countyGeo.features)
+    .join("path")
+    .attr("class", "county no-data")
+    .attr("d", path)
+    .attr("data-fips", d => d.id.toString().padStart(5,"0"))
+    .on("mousemove", onMouseMove)
+    .on("mouseleave", onMouseLeave)
+    .on("click", onCountyClick);
+
+  window.addEventListener("resize", () => {
+    const w2 = document.getElementById("center").clientWidth;
+    const h2 = document.getElementById("center").clientHeight;
+    projection.fitSize([w2, h2], STATE.countyGeo);
+    path = d3.geoPath(projection);
+    gCounties.selectAll("path.county").attr("d", path);
+  });
+}
+
+function countyValue(fips) {
+  if (!STATE.activeHazard || !STATE.hazardData[STATE.activeHazard.id]) return null;
+  const data = STATE.hazardData[STATE.activeHazard.id];
+  const county = data.counties.find(c => c.fips === fips);
+  if (!county) return null;
+  const v = county.scenarios[STATE.activeGwl];
+  return (v == null || isNaN(v)) ? null : v;
+}
+
+function updateMap() {
+  if (!gCounties) return;
+  const data = STATE.hazardData[STATE.activeHazard?.id];
+  if (!data) return;
+
+  const vals = data.counties
+    .map(c => c.scenarios[STATE.activeGwl])
+    .filter(v => v != null && !isNaN(v) && v > 0);
+
+  const ext = d3.extent(vals);
+  const colorScale = (HAZARD_COLORS[STATE.activeHazard.hazard_type] || HAZARD_COLORS.heat)
+    .domain(ext);
+
+  gCounties.selectAll("path.county").each(function(d) {
+    const fips = d.id.toString().padStart(5, "0");
+    const v = countyValue(fips);
+    d3.select(this)
+      .classed("no-data", v == null)
+      .attr("fill", v == null ? "var(--bg3)" : colorScale(v));
+  });
+
+  // legend
+  const htype = STATE.activeHazard.hazard_type;
+  const stops = htype === "precip" ? ["#e0f3db","#43a2ca","#0868ac"]
+              : htype === "wind"   ? ["#f1eef6","#74a9cf","#034e7b"]
+              : ["#ffffb2","#fd8d3c","#bd0026"];
+  document.getElementById("legend-bar").style.background =
+    `linear-gradient(to right,${stops.join(",")})`;
+  document.getElementById("legend-title").textContent =
+    `${STATE.activeHazard.label} (${STATE.activeHazard.unit})`;
+  document.getElementById("leg-min").textContent = ext[0] != null ? ext[0].toFixed(2) : "—";
+  document.getElementById("leg-max").textContent = ext[1] != null ? ext[1].toFixed(2) : "—";
+}
+
+function onMouseMove(event, d) {
+  const fips = d.id.toString().padStart(5, "0");
+  const v = countyValue(fips);
+  const data = STATE.hazardData[STATE.activeHazard?.id];
+  const county = data?.counties.find(c => c.fips === fips);
+  const tt = document.getElementById("tooltip");
+  document.getElementById("tt-name").textContent = county?.name || fips;
+  document.getElementById("tt-val").textContent  = v != null ? v.toFixed(3) : "no data";
+  document.getElementById("tt-unit").textContent = STATE.activeHazard?.unit || "";
+  const rect = document.getElementById("center").getBoundingClientRect();
+  tt.style.left = (event.clientX - rect.left + 14) + "px";
+  tt.style.top  = (event.clientY - rect.top  - 10) + "px";
+  tt.style.opacity = "1";
+}
+function onMouseLeave() { document.getElementById("tooltip").style.opacity = "0"; }
+
+function onCountyClick(event, d) {
+  const fips = d.id.toString().padStart(5, "0");
+  STATE.selectedFips = fips;
+  gCounties.selectAll("path.county").classed("selected", f => f.id.toString().padStart(5,"0") === fips);
+  renderCountyDetail(fips);
+}
+
+// ─────────────────────────────────────────────
+// County detail panel
+// ─────────────────────────────────────────────
+function renderCountyDetail(fips) {
+  const data = STATE.hazardData[STATE.activeHazard?.id];
+  if (!data) return;
+  const county = data.counties.find(c => c.fips === fips);
+  if (!county) return;
+
+  const gwl    = STATE.activeGwl;
+  const curVal = county.scenarios[gwl];
+  const unit   = STATE.activeHazard.unit;
+
+  // scenario track
+  const gwls = STATE.activeHazard.gwls;
+  const scSegs = gwls.map(g => {
+    const v = county.scenarios[g];
+    return `<div class="sc-seg${g===gwl?' selected':''}">
+      <div class="sc-gwl">+${g}°C</div>
+      <div class="sc-num" style="color:${g===gwl?'var(--accent)':'var(--text)'}">${v!=null?v.toFixed(2):'—'}</div>
+    </div>`;
+  }).join("");
+
+  // sectors — sort relevant first, then by exposed jobs desc
+  const sectorRows = STATE.sectors
+    .filter(s => county.sectors[s.key])
+    .map(s => {
+      const sc = county.sectors[s.key];
+      return { ...s, ...sc };
+    })
+    .sort((a, b) => {
+      if (a.relevant !== b.relevant) return b.relevant - a.relevant;
+      return b.exposed - a.exposed;
+    });
+
+  const maxExposed = Math.max(...sectorRows.filter(s => s.relevant).map(s => s.exposed), 1);
+
+  const sectorHTML = sectorRows.map(s => {
+    const pct = s.relevant ? Math.min(100, (s.exposed / maxExposed * 100)).toFixed(0) : 0;
+    const expLabel = s.exposed >= 1000 ? (s.exposed/1000).toFixed(1)+"k" : Math.round(s.exposed).toString();
+    return `<div class="sector-row${s.relevant?'':' sector-irrelevant'}">
+      <div class="sector-dot" style="background:${s.color}"></div>
+      <span class="sector-name" title="${s.label}">${s.short}</span>
+      <div class="sector-bar-bg">
+        <div class="sector-bar-fill" style="width:${pct}%;background:${s.color}"></div>
+      </div>
+      <span class="sector-exposed">${s.relevant ? expLabel+" exp." : "low risk"}</span>
+    </div>`;
+  }).join("");
+
+  const totalExposed = sectorRows.filter(s=>s.relevant).reduce((a,b) => a + b.exposed, 0);
+  const expLabel = totalExposed >= 1000 ? (totalExposed/1000).toFixed(1)+"k" : Math.round(totalExposed).toString();
+
+  document.getElementById("county-detail").innerHTML = `
+    <div>
+      <div class="panel-label">${county.name}</div>
+      <div style="font-family:var(--font-disp);font-size:22px;font-weight:300;margin:4px 0 12px;color:var(--text);">
+        ${curVal != null ? curVal.toFixed(3) : '—'}
+        <span style="font-size:14px;color:var(--muted);font-family:var(--font-sans)">${unit}</span>
+      </div>
+
+      <div class="panel-label" style="margin-bottom:6px">All scenarios</div>
+      <div class="scenario-track" style="margin-bottom:16px">${scSegs}</div>
+
+      <div class="stat-grid" style="margin-bottom:16px">
+        <div class="stat-card">
+          <div class="sc-label">Total jobs</div>
+          <div class="sc-val">${(county.total_jobs/1000).toFixed(1)}k</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">Weather-exposed</div>
+          <div class="sc-val" style="color:var(--accent)">${expLabel}</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">Population</div>
+          <div class="sc-val">${county.population >= 1000 ? (county.population/1000).toFixed(0)+"k" : county.population}</div>
+        </div>
+        <div class="stat-card">
+          <div class="sc-label">Reference value</div>
+          <div class="sc-val">${county.ref_value != null ? county.ref_value.toFixed(2) : '—'}</div>
+          <div class="sc-unit">${unit}</div>
+        </div>
+      </div>
+
+      <div class="panel-label" style="margin-bottom:6px">Jobs by sector exposure</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">
+        Bar = outdoor-exposed workers · greyed = low relevance for this hazard
+      </div>
+      <div>${sectorHTML}</div>
+    </div>
+  `;
+}
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+[
+  {
+    "key": "11.0_Agriculture_Forestry_Fishing_and_Hunting",
+    "label": "Agriculture, Forestry & Hunting",
+    "short": "Agriculture",
+    "outdoor_weight": 0.92,
+    "hazards": [
+      "heat",
+      "extreme_heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#3B6D11"
+  },
+  {
+    "key": "21.0_Mining_Quarrying_and_Oil_and_Gas_Extraction",
+    "label": "Mining, Quarrying & Oil/Gas",
+    "short": "Mining & Oil/Gas",
+    "outdoor_weight": 0.8,
+    "hazards": [
+      "heat",
+      "extreme_heat",
+      "wind"
+    ],
+    "color": "#854F0B"
+  },
+  {
+    "key": "23.0_Construction",
+    "label": "Construction",
+    "short": "Construction",
+    "outdoor_weight": 0.78,
+    "hazards": [
+      "heat",
+      "extreme_heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#D85A30"
+  },
+  {
+    "key": "48-49_Transportation_and_Warehousing",
+    "label": "Transportation & Warehousing",
+    "short": "Transportation",
+    "outdoor_weight": 0.55,
+    "hazards": [
+      "heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#185FA5"
+  },
+  {
+    "key": "22.0_Utilities",
+    "label": "Utilities",
+    "short": "Utilities",
+    "outdoor_weight": 0.5,
+    "hazards": [
+      "heat",
+      "extreme_heat",
+      "wind"
+    ],
+    "color": "#533AB7"
+  },
+  {
+    "key": "31-33_Manufacturing",
+    "label": "Manufacturing",
+    "short": "Manufacturing",
+    "outdoor_weight": 0.3,
+    "hazards": [
+      "heat",
+      "extreme_heat"
+    ],
+    "color": "#0F6E56"
+  },
+  {
+    "key": "72.0_Accommodation_and_Food_Services",
+    "label": "Accommodation & Food Services",
+    "short": "Food & Hospitality",
+    "outdoor_weight": 0.22,
+    "hazards": [
+      "heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#BA7517"
+  },
+  {
+    "key": "71.0_Arts_Entertainment_and_Recreation",
+    "label": "Arts, Entertainment & Recreation",
+    "short": "Arts & Recreation",
+    "outdoor_weight": 0.45,
+    "hazards": [
+      "heat",
+      "extreme_heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#993556"
+  },
+  {
+    "key": "44-45_Retail_Trade",
+    "label": "Retail Trade",
+    "short": "Retail",
+    "outdoor_weight": 0.15,
+    "hazards": [
+      "heat"
+    ],
+    "color": "#2563EB"
+  },
+  {
+    "key": "62.0_Health_Care_and_Social_Assistance",
+    "label": "Health Care & Social Assistance",
+    "short": "Health Care",
+    "outdoor_weight": 0.08,
+    "hazards": [
+      "heat"
+    ],
+    "color": "#7C3AED"
+  },
+  {
+    "key": "61.0_Educational_Services",
+    "label": "Educational Services",
+    "short": "Education",
+    "outdoor_weight": 0.1,
+    "hazards": [
+      "heat",
+      "wind"
+    ],
+    "color": "#0891B2"
+  },
+  {
+    "key": "54.0_Professional_Scientific_and_Technical_Services",
+    "label": "Professional, Scientific & Technical",
+    "short": "Professional Services",
+    "outdoor_weight": 0.08,
+    "hazards": [],
+    "color": "#6B7280"
+  },
+  {
+    "key": "56.0_Administrative_and_Support_and_Waste_Management_and_Remediation_Services",
+    "label": "Admin, Support & Waste Management",
+    "short": "Admin & Waste Mgmt",
+    "outdoor_weight": 0.25,
+    "hazards": [
+      "heat",
+      "wind"
+    ],
+    "color": "#9CA3AF"
+  },
+  {
+    "key": "42.0_Wholesale_Trade",
+    "label": "Wholesale Trade",
+    "short": "Wholesale",
+    "outdoor_weight": 0.2,
+    "hazards": [
+      "heat",
+      "wind"
+    ],
+    "color": "#A78BFA"
+  },
+  {
+    "key": "52.0_Finance_and_Insurance",
+    "label": "Finance & Insurance",
+    "short": "Finance",
+    "outdoor_weight": 0.03,
+    "hazards": [],
+    "color": "#6B7280"
+  },
+  {
+    "key": "53.0_Real_Estate_and_Rental_and_Leasing",
+    "label": "Real Estate & Rental",
+    "short": "Real Estate",
+    "outdoor_weight": 0.12,
+    "hazards": [],
+    "color": "#6B7280"
+  },
+  {
+    "key": "51.0_Information",
+    "label": "Information",
+    "short": "Information",
+    "outdoor_weight": 0.05,
+    "hazards": [],
+    "color": "#6B7280"
+  },
+  {
+    "key": "1.0_Federal_Government",
+    "label": "Federal Government",
+    "short": "Federal Gov.",
+    "outdoor_weight": 0.25,
+    "hazards": [
+      "heat",
+      "wind"
+    ],
+    "color": "#374151"
+  },
+  {
+    "key": "2.0_State_Government",
+    "label": "State Government",
+    "short": "State Gov.",
+    "outdoor_weight": 0.2,
+    "hazards": [
+      "heat",
+      "wind"
+    ],
+    "color": "#4B5563"
+  },
+  {
+    "key": "3.0_Local_Government",
+    "label": "Local Government",
+    "short": "Local Gov.",
+    "outdoor_weight": 0.3,
+    "hazards": [
+      "heat",
+      "wind",
+      "precip"
+    ],
+    "color": "#6B7280"
+  }
+]
