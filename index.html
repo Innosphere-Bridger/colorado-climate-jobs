@@ -113,6 +113,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .th{background:rgba(240,100,100,0.18);color:#f09090;}
 .tw{background:rgba(96,168,240,0.18);color:#90c0f0;}
 .tp{background:rgba(96,212,184,0.18);color:#80d4b8;}
+.src-link{display:inline-block;color:var(--accent2);text-decoration:none;font-size:10px;opacity:0.8;word-break:break-all;line-height:1.5;}
+.src-link:hover{opacity:1;text-decoration:underline;}
+.src-label{font-size:9px;color:var(--muted);display:block;margin-top:5px;margin-bottom:1px;letter-spacing:0.03em;}
+.m-derivation{font-size:10px;color:var(--muted);line-height:1.6;margin-top:3px;}
+.conf{display:inline-block;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:500;letter-spacing:0.03em;white-space:nowrap;}
+.conf-direct{background:rgba(48,180,96,0.15);color:#4ade80;border:1px solid rgba(48,180,96,0.3);}
+.conf-inferred{background:rgba(210,153,34,0.15);color:#fbbf24;border:1px solid rgba(210,153,34,0.3);}
+.conf-gap{background:rgba(248,81,73,0.15);color:#f87171;border:1px solid rgba(248,81,73,0.3);}
+.m-table td.src-cell{min-width:180px;vertical-align:top;}
+.m-table td.rat-cell{min-width:200px;vertical-align:top;}
+#method-box{max-width:920px;}
 
 /* Loading */
 #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;z-index:100;}
@@ -152,22 +163,225 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
   <h3>4. Sector weights & what "low risk" means</h3>
   <p>A sector is greyed out when the selected hazard type has no meaningful direct pathway to affect that sector's workers. This does <em>not</em> mean zero economic impact — supply chain, infrastructure, and consumer-spending effects are real but not captured here. This tool focuses on <strong style="color:var(--text)">direct worker exposure only.</strong></p>
+  <p>Weights are derived primarily from the <strong style="color:var(--text)">BLS Occupational Requirements Survey (ORS)</strong>, which measures the fraction of workers in each occupation group who perform critical tasks outdoors, unprotected from the elements. Where ORS does not cover a sector (notably agriculture), weights are inferred from O*NET work context ratings and OSHA enforcement data. Confidence indicators:</p>
+  <p style="margin:6px 0 2px;"><span class="conf conf-direct">✓ direct ORS</span> &nbsp; BLS ORS publishes an occupation group figure that directly covers this sector. &nbsp; <span class="conf conf-inferred">~ inferred</span> &nbsp; Expert estimate derived from adjacent ORS groups or other federal data. &nbsp; <span class="conf conf-gap">⚠ data gap</span> &nbsp; ORS excludes this sector by design; weight is based on O*NET and OSHA data only.</p>
   <table class="m-table" style="margin-top:12px;">
-    <tr><th></th><th>Sector</th><th>Outdoor weight</th><th>Relevant hazards</th><th>Rationale</th></tr>
-    <tr><td><span class="dot-s" style="background:#3B6D11"></span></td><td>Agriculture, Forestry & Hunting</td><td class="ow">92%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Nearly all work is outdoors in direct sun. Highest heat-stress risk per OSHA. Hail and wind directly damage crops.</td></tr>
-    <tr><td><span class="dot-s" style="background:#854F0B"></span></td><td>Mining, Quarrying & Oil/Gas</td><td class="ow">80%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Extraction is predominantly outdoor. Equipment and worker safety affected by extreme heat and high winds.</td></tr>
-    <tr><td><span class="dot-s" style="background:#D85A30"></span></td><td>Construction</td><td class="ow">78%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>OSHA data: highest heat illness rate of any US industry. Rain and wind cause work stoppages.</td></tr>
-    <tr><td><span class="dot-s" style="background:#185FA5"></span></td><td>Transportation & Warehousing</td><td class="ow">55%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Drivers and loaders in non-climate-controlled environments. Ice and wind affect road safety.</td></tr>
-    <tr><td><span class="dot-s" style="background:#533AB7"></span></td><td>Utilities</td><td class="ow">50%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Line workers and maintenance crews work outdoors. Heat increases grid demand and worker risk simultaneously.</td></tr>
-    <tr><td><span class="dot-s" style="background:#993556"></span></td><td>Arts, Entertainment & Recreation</td><td class="ow">45%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td><td>Ski resorts, trails, and outdoor venues. Colorado's recreation economy is highly weather-sensitive.</td></tr>
-    <tr><td><span class="dot-s" style="background:#374151"></span></td><td>Government (all levels)</td><td class="ow">20–30%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Parks workers, road crews, and emergency services are exposed. Office-based government is not.</td></tr>
-    <tr><td><span class="dot-s" style="background:#0F6E56"></span></td><td>Manufacturing</td><td class="ow">30%</td><td><span class="tag th">heat</span></td><td>Loading docks and some production floors are not climate-controlled. Wind/precip have limited direct effect.</td></tr>
-    <tr><td><span class="dot-s" style="background:#9CA3AF"></span></td><td>Admin & Waste Management</td><td class="ow">25%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Waste collectors and landscapers are exposed. Admin majority works indoors.</td></tr>
-    <tr><td><span class="dot-s" style="background:#BA7517"></span></td><td>Food & Hospitality</td><td class="ow">22%</td><td><span class="tag th">heat</span><span class="tag tp">precip</span></td><td>Outdoor dining and resort operations exposed. Most kitchen and hotel work is indoors.</td></tr>
-    <tr><td><span class="dot-s" style="background:#2563EB"></span></td><td>Retail Trade</td><td class="ow">15%</td><td><span class="tag th">heat</span></td><td>Garden centers, outdoor markets, delivery staff. Most retail is climate-controlled.</td></tr>
-    <tr><td><span class="dot-s" style="background:#0891B2"></span></td><td>Educational Services</td><td class="ow">10%</td><td><span class="tag th">heat</span><span class="tag tw">wind</span></td><td>Outdoor PE and sports coaching. Most instruction is indoors.</td></tr>
-    <tr><td><span class="dot-s" style="background:#7C3AED"></span></td><td>Health Care</td><td class="ow">8%</td><td><span class="tag th">heat</span></td><td>Primarily indoor. Heat increases patient demand rather than directly exposing most workers.</td></tr>
-    <tr><td><span class="dot-s" style="background:#6B7280"></span></td><td>Finance, Insurance, Real Estate, Professional, Information</td><td class="ow">3–12%</td><td>—</td><td>Office-based. Greyed out for all hazards. Minor outdoor exposure does not move the aggregate.</td></tr>
+    <tr><th></th><th>Sector</th><th>Weight</th><th>Hazards</th><th>Confidence</th><th class="rat-cell">Derivation</th><th class="src-cell">Sources</th></tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#3B6D11"></span></td>
+      <td>Agriculture, Forestry &amp; Hunting</td>
+      <td class="ow">92%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
+      <td><span class="conf conf-gap">⚠ data gap</span></td>
+      <td class="rat-cell"><div class="m-derivation"><strong style="color:var(--text)">Inferred — ORS excludes this sector.</strong> Nearly all field, forestry, and livestock work is outdoors. OSHA ranks agriculture among top sectors for heat fatalities. 92% is consistent with O*NET "outdoors, exposed to weather" ratings for SOC 45-xxxx occupations (~90–95/100).</div></td>
+      <td class="src-cell">
+        <span class="src-label">ORS sector exclusions</span>
+        <a class="src-link" href="https://www.bls.gov/ors/questions-and-answers.htm" target="_blank">bls.gov/ors/questions-and-answers.htm</a>
+        <span class="src-label">OSHA Heat NPRM — ag fatality ranking</span>
+        <a class="src-link" href="https://www.federalregister.gov/documents/2024/08/30/2024-14824/heat-injury-and-illness-prevention-in-outdoor-and-indoor-work-settings" target="_blank">federalregister.gov — OSHA Heat NPRM (2024)</a>
+        <span class="src-label">O*NET outdoor exposure context</span>
+        <a class="src-link" href="https://www.onetonline.org/find/descriptor/result/4.C.2.a.1.b" target="_blank">onetonline.org — Outdoors, Exposed to Weather</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#854F0B"></span></td>
+      <td>Mining, Quarrying &amp; Oil/Gas</td>
+      <td class="ow">80%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Disaggregated from BLS ORS 2024 combined <strong style="color:var(--text)">Construction &amp; Extraction: 91% outdoor</strong>. The 80% is conservative of 91% to account for underground mining and enclosed processing facilities where workers are sheltered from weather.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — Construction &amp; Extraction: 91% outdoor</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">ORS Construction &amp; Extraction profile</span>
+        <a class="src-link" href="https://www.bls.gov/ors/factsheet/construction-and-extraction-occupations.htm" target="_blank">bls.gov — C&amp;E ORS Profile</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#D85A30"></span></td>
+      <td>Construction</td>
+      <td class="ow">78%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Conservative of ORS 2024 figure (~91% for construction/extraction). The 78% accounts for office/admin/estimating roles within NAICS 23 firms. Heat rationale is the strongest of any sector: <strong style="color:var(--text)">construction = ~36% of all US occupational heat deaths</strong> despite being ~6% of the workforce.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — ~91% outdoor (construction/extraction)</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">OSHA NPRM — construction leads heat fatalities &amp; hospitalizations</span>
+        <a class="src-link" href="https://www.federalregister.gov/documents/2024/08/30/2024-14824/heat-injury-and-illness-prevention-in-outdoor-and-indoor-work-settings" target="_blank">federalregister.gov — OSHA Heat NPRM (2024)</a>
+        <span class="src-label">CPWR — construction heat fatalities by state (2023)</span>
+        <a class="src-link" href="https://www.cpwr.com/wp-content/uploads/DataBulletin-August2025.pdf" target="_blank">cpwr.com — Data Bulletin Aug 2025</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#185FA5"></span></td>
+      <td>Transportation &amp; Warehousing</td>
+      <td class="ow">55%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
+      <td><span class="conf conf-direct">✓ direct ORS</span></td>
+      <td class="rat-cell"><div class="m-derivation"><strong style="color:var(--text)">Directly supported: BLS ORS 2024 reports 54% outdoor exposure</strong> for transportation &amp; material moving occupations — the closest ORS match to NAICS 48–49. Warehousing interior workers pull the figure below 100%.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — Transportation &amp; Material Moving: 54% outdoor</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">BLS IIF — trade/transport highest heat injury case count</span>
+        <a class="src-link" href="https://usafacts.org/articles/how-dangerous-is-extreme-heat-for-americas-workers/" target="_blank">usafacts.org — Heat danger by industry</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#533AB7"></span></td>
+      <td>Utilities</td>
+      <td class="ow">50%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">No direct ORS figure for NAICS 22. Derived from the Installation, Maintenance &amp; Repair occupation group (closest ORS proxy for line workers). 50% reflects the mix of outdoor field crews and indoor operations/control-room staff. Heat is a dual hazard: directly exposing workers and raising grid demand simultaneously.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — Installation, Maintenance &amp; Repair occupations</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">OSHA heat — outdoor utility operations</span>
+        <a class="src-link" href="https://www.osha.gov/heat-exposure" target="_blank">osha.gov/heat-exposure</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#993556"></span></td>
+      <td>Arts, Entertainment &amp; Recreation</td>
+      <td class="ow">45%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span><span class="tag tp">precip</span></td>
+      <td><span class="conf conf-inferred">~ CO-adjusted</span></td>
+      <td class="rat-cell"><div class="m-derivation">No direct ORS figure for NAICS 71. Nationally the sector is highly mixed (theaters/casinos ≈ 0%; ski resorts/trails ≈ 100%). The 45% is <strong style="color:var(--text)">calibrated for Colorado</strong>, where outdoor recreation dominates the NAICS 71 mix — Colorado's outdoor recreation share of GDP is well above the national average.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BEA Outdoor Recreation Satellite Account (2024)</span>
+        <a class="src-link" href="https://www.bea.gov/news/2026/outdoor-recreation-economic-statistics-us-and-states-2024" target="_blank">bea.gov — Outdoor Recreation 2024</a>
+        <span class="src-label">BEA — Colorado outdoor rec share above national avg</span>
+        <a class="src-link" href="https://apps.bea.gov/scb/issues/2025/05-may/0525-outdoor-recreation.htm" target="_blank">bea.gov/scb — Outdoor Recreation Statistics 2023</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#374151"></span></td>
+      <td>Government (all levels)</td>
+      <td class="ow">20–30%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Range reflects high internal heterogeneity. Parks crews, road maintenance, and emergency services are substantially outdoor (upper end). Office-based civil servants are near-zero (lower end). BLS IIF data shows state/local government service workers top heat injury counts within government. Note: OSHA's proposed heat rule <strong style="color:var(--text)">does not cover public sector</strong> employees in non-plan states.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS IIF — gov service workers top heat injury category</span>
+        <a class="src-link" href="https://usafacts.org/articles/how-dangerous-is-extreme-heat-for-americas-workers/" target="_blank">usafacts.org — Heat danger by industry</a>
+        <span class="src-label">OSHA heat rule — public sector exclusion</span>
+        <a class="src-link" href="https://www.osha.gov/heat-exposure/rulemaking" target="_blank">osha.gov — Heat NPRM Rulemaking</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#0F6E56"></span></td>
+      <td>Manufacturing</td>
+      <td class="ow">30%</td>
+      <td><span class="tag th">heat</span></td>
+      <td><span class="conf conf-inferred">~ may be high</span></td>
+      <td class="rat-cell"><div class="m-derivation">No direct ORS benchmark. OSHA data confirms manufacturing ranks 2nd in heat hospitalizations (2017–2022), but much of that is from <strong style="color:var(--text)">indoor heat sources</strong> (furnaces, ovens) — not outdoor weather exposure. Loading docks and outdoor staging justify some outdoor weight. A figure of 15–25% may better reflect weather-driven exposure specifically.</div></td>
+      <td class="src-cell">
+        <span class="src-label">OSHA NPRM — manufacturing 2nd in heat hospitalizations</span>
+        <a class="src-link" href="https://www.federalregister.gov/documents/2024/08/30/2024-14824/heat-injury-and-illness-prevention-in-outdoor-and-indoor-work-settings" target="_blank">federalregister.gov — OSHA Heat NPRM (2024)</a>
+        <span class="src-label">BLS ORS 2024 — production occupations (indoor-dominant)</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#9CA3AF"></span></td>
+      <td>Admin &amp; Waste Management</td>
+      <td class="ow">25%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">NAICS 56 bundles landscaping/waste collection (high outdoor) with office staffing firms (near-zero). OSHA fatality data flags landscaping explicitly as a top heat-death sector. The 25% averages these extremes; local sub-industry mix (NAICS 5617 vs 5611) would improve the estimate.</div></td>
+      <td class="src-cell">
+        <span class="src-label">OSHA NPRM — landscaping in top fatality sectors</span>
+        <a class="src-link" href="https://www.federalregister.gov/documents/2024/08/30/2024-14824/heat-injury-and-illness-prevention-in-outdoor-and-indoor-work-settings" target="_blank">federalregister.gov — OSHA Heat NPRM (2024)</a>
+        <span class="src-label">PMC — waste management shows large heat injury effects</span>
+        <a class="src-link" href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12498468/" target="_blank">pmc.ncbi.nlm.nih.gov — Nationwide heat &amp; injuries</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#BA7517"></span></td>
+      <td>Food &amp; Hospitality</td>
+      <td class="ow">22%</td>
+      <td><span class="tag th">heat</span><span class="tag tp">precip</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Outdoor dining staff, resort/ski-area workers, and delivery drivers represent the exposed fraction. The majority of kitchen, hotel, and food service workers are indoor. Heat for this sector is primarily an indoor hazard (kitchen environments). Precip affects outdoor dining and resort operations.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2025 — chefs/head cooks: 51.6% extreme heat (indoor)</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/ors.htm" target="_blank">bls.gov — ORS 2025 News Release</a>
+        <span class="src-label">OSHA — food service as high-heat indoor environment</span>
+        <a class="src-link" href="https://www.osha.gov/heat-exposure" target="_blank">osha.gov/heat-exposure</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#2563EB"></span></td>
+      <td>Retail Trade</td>
+      <td class="ow">15%</td>
+      <td><span class="tag th">heat</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Well below the BLS ORS all-worker average of 35.7%, consistent with a predominantly climate-controlled sector. Garden centers, outdoor markets, nurseries, and delivery/last-mile staff are the exposed fraction. Most brick-and-mortar retail is indoor.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — all-worker avg 35.7% (retail well below)</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">BLS ORS homepage &amp; database</span>
+        <a class="src-link" href="https://www.bls.gov/ors/" target="_blank">bls.gov/ors/</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#0891B2"></span></td>
+      <td>Educational Services</td>
+      <td class="ow">10%</td>
+      <td><span class="tag th">heat</span><span class="tag tw">wind</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Overwhelmingly indoor sector. Outdoor-exposed roles include PE teachers, coaches, groundskeepers, crossing guards, and campus maintenance. Classroom instruction and most support staff are indoors. 10% conservatively captures the outdoor-facing minority.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS — environmental conditions by occupation group</span>
+        <a class="src-link" href="https://www.bls.gov/ors/factsheet/orsprofiles.htm" target="_blank">bls.gov — ORS Occupational Profiles</a>
+        <span class="src-label">O*NET — Educational Services occupations (NAICS 61)</span>
+        <a class="src-link" href="https://www.onetonline.org/find/industry?i=61" target="_blank">onetonline.org — NAICS 61</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#7C3AED"></span></td>
+      <td>Health Care</td>
+      <td class="ow">8%</td>
+      <td><span class="tag th">heat</span></td>
+      <td><span class="conf conf-inferred">~ inferred</span></td>
+      <td class="rat-cell"><div class="m-derivation">Among the most indoor-intensive sectors in ORS data. Outdoor-exposed roles include home health aides, EMTs, and hospital grounds staff. Heat is primarily a <strong style="color:var(--text)">demand-side hazard</strong> for health care (increased patient volume during heat events) rather than direct worker exposure.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS — environmental conditions (health care is indoor)</span>
+        <a class="src-link" href="https://www.bls.gov/ors/factsheet/orsprofiles.htm" target="_blank">bls.gov — ORS Occupational Profiles</a>
+        <span class="src-label">OSHA — heat increasing ER demand (indirect pathway)</span>
+        <a class="src-link" href="https://www.osha.gov/heat-exposure" target="_blank">osha.gov/heat-exposure</a>
+      </td>
+    </tr>
+
+    <tr>
+      <td><span class="dot-s" style="background:#6B7280"></span></td>
+      <td>Finance, Insurance, Real Estate, Professional, Information</td>
+      <td class="ow">3–12%</td>
+      <td>—</td>
+      <td><span class="conf conf-direct">✓ supported</span></td>
+      <td class="rat-cell"><div class="m-derivation">Office-based sectors. The BLS ORS all-worker average of 35.7% is driven by outdoor-heavy sectors — these office sectors sit well below. Minor exposure (real estate site visits, field IT techs) does not move the aggregate score. Correctly greyed out for all hazards.</div></td>
+      <td class="src-cell">
+        <span class="src-label">BLS ORS 2024 — all-worker 35.7% (office sectors far below avg)</span>
+        <a class="src-link" href="https://www.bls.gov/news.release/archives/ors_11192024.htm" target="_blank">bls.gov — ORS 2024 News Release</a>
+        <span class="src-label">BLS blog — "Fire and Ice" outdoor exposure by sector</span>
+        <a class="src-link" href="https://www.bls.gov/blog/2023/fire-and-ice-what-do-we-know-about-jobs-involving-exposure-to-outdoor-elements.htm" target="_blank">bls.gov — Fire and Ice blog (2023)</a>
+      </td>
+    </tr>
+
   </table>
 
   <h3>5. Limitations</h3>
