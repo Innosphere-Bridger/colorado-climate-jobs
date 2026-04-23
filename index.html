@@ -617,20 +617,20 @@ function initMap(){
     .attr("data-fips",d=>d.id.toString().padStart(5,"0"))
     .on("mousemove",onMouseMove).on("mouseleave",onMouseLeave).on("click",onCountyClick);
 
-  window.addEventListener("resize",()=>{
-    const w2=el.clientWidth, h2=el.clientHeight;
-    STATE.projection.fitSize([w2,h2],STATE.countyGeo);
-    STATE.geoPath=d3.geoPath(STATE.projection);
-
+  window.addEventListener("resize", () => {
+    const w2 = el.clientWidth, h2 = el.clientHeight;
+    STATE.projection
+        .fitSize([w2, h2], STATE.countyGeo);   // ← only this line
+    STATE.geoPath = d3.geoPath(STATE.projection);
     window.__coProjection = STATE.projection;
-
+    window.__addonUpdate?.();
     syncCanvas();
     if (STATE.overlayOn) renderTiffPixels();
-    [choroSel,outlineSel,clickSel].forEach(s=>{
-      s.attr("viewBox",`0 0 ${w2} ${h2}`);
-      s.selectAll("path").attr("d",STATE.geoPath);
+    [choroSel, outlineSel, clickSel].forEach(s => {
+        s.attr("viewBox", `0 0 ${w2} ${h2}`);
+        s.selectAll("path").attr("d", STATE.geoPath);
     });
-    });
+  });
 }
 
 
