@@ -145,8 +145,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   <p style="color:var(--muted);font-size:13px;margin-top:4px;">How climate exposure is calculated and how job sector risk is determined.</p>
 
   <h3>1. Climate data & raster overlay</h3>
-  <p>Each layer is a GeoTIFF raster file at ~10km resolution (0.09° grid cells). When you enable the <strong style="color:var(--accent2)">raw tiff overlay</strong>, the actual pixel values from the source file are drawn directly onto the map — every grid cell is rendered at its true geographic position and size using the D3 Albers USA projection. This is not averaged or smoothed — it is the exact data from the file.</p>
-  <p>The county choropleth (shown without the overlay) uses the <strong style="color:var(--text)">spatial mean of all pixels within each county boundary</strong> — a zonal statistics operation run in Python using rasterio and geopandas. Files named <em>minus_REF</em> show the <strong style="color:var(--text)">change from a historical baseline (~1980–2010)</strong>, not an absolute value.</p>
+  <p>Each layer is a GeoTIFF raster file at either ~10km resolution (~0.09° cells, on the coarse grid) or ~3 km resolution (~0.03° cells, on the fine grid). These layers, which can be viewed by enabling the raster overlay, contain data interpolated from the original climate model analysis fields to WGS84 coordinates which are evenly-spaced across the state of Colorado for clarity of presentation. This process introduces some smoothing, but preserves overall patterns in the data.</p>
+  <p>The county choropleth (shown without the overlay) uses the spatial mean of all data points within each county boundary—a zonal statistics operation run in Python using rasterio and geopandas—from the original, non-interpolated climate model analysis fields. Files named minus_REF show the change from a historical baseline (~1980–2010), not an absolute value.</p>
 
   <h3>2. Warming scenarios (Global Warming Levels)</h3>
   <table class="m-table">
@@ -394,7 +394,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <h1>Colorado <span>Climate Hazard</span> × Jobs</h1>
     <div class="header-sep"></div>
     <span class="header-hint">Select a hazard · choose a warming scenario · click a county</span>
-    <button class="hdr-btn" id="overlay-btn" onclick="toggleOverlay()">⬡ Raw climate data (10km grid)</button>
+    <button class="hdr-btn" id="overlay-btn" onclick="toggleOverlay()">⬡ Climate Projections (10km grid)</button>
     <button class="hdr-btn" onclick="toggleMethodology()">? Methodology</button>
   </header>
 
@@ -597,6 +597,8 @@ function initMap(){
     .fitSize([w,h],STATE.countyGeo);
   STATE.geoPath=d3.geoPath(STATE.projection);
 
+  window.__coProjection = STATE.projection;
+
   // Choropleth fills
   choroSel=d3.select("#choro-svg");
   choroSel.attr("viewBox",`0 0 ${w} ${h}`);
@@ -626,6 +628,9 @@ function initMap(){
       .parallels([37.5, 40.5])
       .fitSize([w2,h2],STATE.countyGeo);
     STATE.geoPath=d3.geoPath(STATE.projection);
+
+    window.__coProjection = STATE.projection;
+
     syncCanvas();
     if (STATE.overlayOn) renderTiffPixels();
     [choroSel,outlineSel,clickSel].forEach(s=>{
@@ -815,5 +820,9 @@ function renderCountyDetail(fips){
 
 boot();
 </script>
+<!-- ── Hillshade + Cities + PDF addon ── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="hillshade-cities-addon.js"></script>
 </body>
 </html>
