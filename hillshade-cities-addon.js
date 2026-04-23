@@ -1,15 +1,50 @@
 /**
- * hillshade-cities-addon.js  (v3)
+ * hillshade-cities-addon.js  (v4)
  * ─────────────────────────────────────────────────────────────────────────────
- * Z-INDEX STACK (bottom → top):
- *   #choro-svg   z:1   county choropleth fills
- *   #hs-layer    z:2   hillshade  ← ON TOP of fills, mix-blend-mode:multiply
- *   #outline-svg z:3   county borders
- *   #cities-layer z:4  city dots + labels
- *   #click-svg   z:5   transparent click targets
+ * Layering is handled by DOM insertion order — no z-index or position changes
+ * are made to the existing SVGs (which broke clicks, TIFF, and the slider).
  *
- * This is the key fix vs v2: hillshade is ABOVE the choropleth so multiply
- * blending darkens the fill colors instead of blending with the background.
+ * Insertion points:
+ *   #choro-svg    ← choropleth fills
+ *   #hs-layer     ← hillshade inserted immediately AFTER #choro-svg
+ *   #outline-svg  ← county borders
+ *   #cities-layer ← cities inserted immediately AFTER #outline-svg
+ *   #click-svg    ← transparent click targets (untouched)
+ *
+ * PROJECTION NOTE
+ * ───────────────
+ * Revert to your original d3.geoAlbers() — do NOT use geoEquirectangular.
+ * The Albers projection with parallels at [37.5, 40.5] already minimises
+ * Colorado's border curvature to a few pixels. Equirectangular stretches
+ * Colorado horizontally and breaks the TIFF canvas renderer.
+ *
+ * Your initMap() projection block should be:
+ *
+ *   STATE.projection = d3.geoAlbers()
+ *       .rotate([105.55, 0])
+ *       .center([0, 39.0])
+ *       .parallels([37.5, 40.5])
+ *       .fitSize([w, h], STATE.countyGeo);
+ *
+ * And in the resize handler:
+ *
+ *   STATE.projection
+ *       .rotate([105.55, 0])
+ *       .center([0, 39.0])
+ *       .parallels([37.5, 40.5])
+ *       .fitSize([w2, h2], STATE.countyGeo);
+ *
+ * INSTALL
+ * ───────
+ * 1. Drop this file next to index.html.
+ * 2. Add before </body>:
+ *      <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+ *      <script src="hillshade-cities-addon.js"></script>
+ * 3. In initMap(), after fitSize:
+ *      window.__coProjection = STATE.projection;
+ *    Same line in the resize handler.
+ * 4. (Optional) at the end of the resize handler for instant city/hillshade update:
+ *      window.__addonUpdate?.();
  */
 
 (function () {
@@ -24,15 +59,15 @@
   const HILLSHADE_REST =
     "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/export";
 
-  const HILLSHADE_PX      = 1200;   // request resolution (longer axis, px)
-  const HILLSHADE_OPACITY = 0.45;   // 0 = invisible, 1 = full shadow
+  const HILLSHADE_PX      = 1200;
+  const HILLSHADE_OPACITY = 0.45;
 
   const CITY_DOT_RADIUS   = 5;
   const CITY_DOT_COLOR    = "#dc143c";
   const CITY_LABEL_SIZE   = 11;
   const CITY_LABEL_OFFSET = [8, 4];
 
-  const MAP_CONTAINER_ID  = "center";
+  const MAP_CONTAINER_ID = "center";
 
   const HAZARD_SEL   = ["#hazard-select",   "[data-hazard]",   ".hazard-label",   "select:first-of-type"];
   const SCENARIO_SEL = ["#scenario-select", "[data-scenario]", ".scenario-label", "select:nth-of-type(2)"];
@@ -81,7 +116,7 @@
   function buildFilename() {
     const hazard   = slug(readLabel(findFirst(HAZARD_SEL)))   || "hazard";
     const scenario = slug(readLabel(findFirst(SCENARIO_SEL))) || "scenario";
-    return `Colorado_ClimateHazard_${hazard}_${scenario}_${new Date().toISOString().slice(0,10)}.png`;
+    return `Colorado_ClimateHazard_${hazard}_${scenario}_${new Date().toISOString().slice(0, 10)}.png`;
   }
 
   function getViewBox() {
@@ -91,7 +126,6 @@
     return (vb && vb.width) ? { w: vb.width, h: vb.height } : null;
   }
 
-  /** Project all four BBOX corners → tightest screen-space rect (SVG user-units). */
   function projectedBBoxRect(proj) {
     const pts = [
       [BBOX.lonMin, BBOX.latMin], [BBOX.lonMin, BBOX.latMax],
@@ -105,44 +139,25 @@
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * SET UP THE Z-INDEX STACK
-   * Called once on init to lock every SVG layer into its correct position.
-   * ══════════════════════════════════════════════════════════════════════════ */
-
-  function enforceZStack() {
-    const layers = [
-      { id: "choro-svg",   z: 1 },   // choropleth fills  — bottom
-      // hillshade img sits at z:2   (inserted dynamically below)
-      { id: "outline-svg", z: 3 },   // county borders
-      // cities svg at z:4           (inserted dynamically below)
-      { id: "click-svg",   z: 5 },   // click targets     — top
-    ];
-    layers.forEach(({ id, z }) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.style.position = "relative";  // required for z-index to take effect on SVGs
-      el.style.zIndex   = z;
-    });
-  }
-
-  /* ══════════════════════════════════════════════════════════════════════════
-   * 1.  HILLSHADE  (z:2 — above choropleth, multiply-blended)
+   * 1.  HILLSHADE
+   *
+   * Inserted into the DOM immediately AFTER #choro-svg so it sits above the
+   * county fills but below #outline-svg (county borders).
+   * No position or z-index changes to any existing element.
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let hillshadeEl = null;
 
   function buildHillshadeUrl() {
     const aspect = (BBOX.lonMax - BBOX.lonMin) / (BBOX.latMax - BBOX.latMin);
-    const pw = Math.round(HILLSHADE_PX);
-    const ph = Math.round(HILLSHADE_PX / aspect);
     return HILLSHADE_REST + "?" + new URLSearchParams({
       bbox:        `${BBOX.lonMin},${BBOX.latMin},${BBOX.lonMax},${BBOX.latMax}`,
       bboxSR:      "4326",
       imageSR:     "4326",
-      size:        `${pw},${ph}`,
+      size:        `${Math.round(HILLSHADE_PX)},${Math.round(HILLSHADE_PX / aspect)}`,
       format:      "png32",
       transparent: "true",
-      f:           "image",     // returns raw PNG — <img> can display without CORS preflight
+      f:           "image",
     });
   }
 
@@ -150,7 +165,6 @@
     if (!hillshadeEl) return;
     const r = projectedBBoxRect(proj);
     if (!r) return;
-    // Percentage positioning relative to the container — survives CSS layout changes.
     Object.assign(hillshadeEl.style, {
       left:   (r.x / vb.w * 100) + "%",
       top:    (r.y / vb.h * 100) + "%",
@@ -163,28 +177,35 @@
     if (!hillshadeEl) {
       hillshadeEl = document.createElement("img");
       hillshadeEl.id          = "hs-layer";
-      hillshadeEl.src         = buildHillshadeUrl();  // static — bbox never changes
+      hillshadeEl.src         = buildHillshadeUrl();
       hillshadeEl.crossOrigin = "anonymous";
       hillshadeEl.alt         = "";
       Object.assign(hillshadeEl.style, {
         position:      "absolute",
         pointerEvents: "none",
         opacity:       HILLSHADE_OPACITY,
-        // multiply: light terrain → county color unchanged; dark terrain → darkens fill.
-        // This makes ridges/valleys visible ON TOP of any choropleth color scheme.
         mixBlendMode:  "multiply",
         display:       "block",
-        zIndex:        "2",   // ABOVE #choro-svg (z:1), BELOW #outline-svg (z:3)
       });
       hillshadeEl.addEventListener("load",  () => console.log("[addon] Hillshade loaded ✓"));
       hillshadeEl.addEventListener("error", () => console.warn("[addon] Hillshade image failed — check Network tab."));
-      container.appendChild(hillshadeEl);
+
+      // Insert AFTER #choro-svg — DOM order places it above fills, below borders.
+      const choroSvg = document.getElementById("choro-svg");
+      if (choroSvg && choroSvg.parentNode) {
+        choroSvg.parentNode.insertBefore(hillshadeEl, choroSvg.nextSibling);
+      } else {
+        container.appendChild(hillshadeEl);
+      }
     }
     positionHillshade(proj, vb);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 2.  CITIES  (z:4 — above outline, below click targets)
+   * 2.  CITIES
+   *
+   * Inserted AFTER #outline-svg — above county borders, below #click-svg.
+   * viewBox is synced on every call so cities scale correctly on resize.
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let citySvgEl = null;
@@ -196,19 +217,25 @@
       citySvgEl = document.createElementNS(NS, "svg");
       citySvgEl.id = "cities-layer";
       Object.assign(citySvgEl.style, {
-        position: "absolute", top: "0", left: "0",
+        position:      "absolute",
+        top: "0", left: "0",
         width: "100%", height: "100%",
         pointerEvents: "none",
-        zIndex: "4",
-        overflow: "visible",
+        overflow:      "visible",
       });
-      document.getElementById(MAP_CONTAINER_ID).appendChild(citySvgEl);
+
+      // Insert AFTER #outline-svg — above borders, below click targets.
+      const outlineSvg = document.getElementById("outline-svg");
+      if (outlineSvg && outlineSvg.parentNode) {
+        outlineSvg.parentNode.insertBefore(citySvgEl, outlineSvg.nextSibling);
+      } else {
+        document.getElementById(MAP_CONTAINER_ID).appendChild(citySvgEl);
+      }
     }
 
-    // Sync viewBox every call so coordinates always align with the choropleth SVG.
+    // Sync viewBox to match the choropleth SVG — critical for correct scaling.
     citySvgEl.setAttribute("viewBox", `0 0 ${vb.w} ${vb.h}`);
 
-    // Full redraw — 15 cities is instantaneous.
     citySvgEl.innerHTML = `
       <defs>
         <filter id="city-shadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -306,7 +333,7 @@
         font-size:14px; font-weight:700; font-family:system-ui,sans-serif;
         cursor:pointer; letter-spacing:.02em;
         box-shadow:0 4px 16px rgba(37,99,235,.45);
-        transition:opacity .15s,transform .15s,box-shadow .15s;
+        transition:opacity .15s,transform .15s;
       }
       #png-dl-btn:hover  { opacity:.9; transform:translateY(-2px); }
       #png-dl-btn:active { transform:translateY(0); }
@@ -352,15 +379,13 @@
     if (!vb) return;
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (!container) return;
+    // Only set position if not already set — avoids breaking existing layout.
     if (getComputedStyle(container).position === "static")
       container.style.position = "relative";
-
     initHillshade(proj, vb, container);
     drawCities(proj, vb);
   }
 
-  // Call this from your resize handler for zero-delay response:
-  //   window.__addonUpdate?.();
   window.__addonUpdate = update;
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -384,9 +409,7 @@
           clearInterval(t); resolve();
         } else if (++n > limit) {
           clearInterval(t);
-          reject(new Error(
-            "[addon] Timed out. Make sure  window.__coProjection = STATE.projection  is set in initMap()."
-          ));
+          reject(new Error("[addon] Timed out — set window.__coProjection = STATE.projection in initMap()."));
         }
       }, ms);
     });
@@ -399,16 +422,10 @@
     addToggles();
     addPngButton();
 
-    try {
-      await waitForMap();
-    } catch (e) {
-      console.error(e.message); return;
-    }
+    try { await waitForMap(); } catch (e) { console.error(e.message); return; }
 
-    enforceZStack();   // lock SVG layers into correct stacking order
     update();
 
-    // ResizeObserver: 80 ms debounce lets D3's resize handler (fitSize) run first.
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (container && typeof ResizeObserver !== "undefined") {
       let timer;
