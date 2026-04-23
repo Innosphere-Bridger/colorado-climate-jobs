@@ -1,34 +1,15 @@
 /**
- * hillshade-cities-addon.js  (v2)
+ * hillshade-cities-addon.js  (v3)
  * ─────────────────────────────────────────────────────────────────────────────
- * Adds to the Colorado Climate Hazard × Jobs dashboard:
+ * Z-INDEX STACK (bottom → top):
+ *   #choro-svg   z:1   county choropleth fills
+ *   #hs-layer    z:2   hillshade  ← ON TOP of fills, mix-blend-mode:multiply
+ *   #outline-svg z:3   county borders
+ *   #cities-layer z:4  city dots + labels
+ *   #click-svg   z:5   transparent click targets
  *
- *   1. ESRI World Hillshade — absolutely-positioned <img> inside #center,
- *      sized/positioned to match the projected Colorado bbox.
- *      Uses the ESRI REST export endpoint (not WMS) — no CORS preflight.
- *
- *   2. City markers + labels — dedicated absolutely-positioned <svg> overlay
- *      inside #center that completely redraws on every resize via
- *      ResizeObserver, so dots always stay pinned to the right counties.
- *
- *   3. "Download Map PNG" button — snapshots only the #center map area
- *      (no sidebars, no controls) and saves a clean rectangular PNG.
- *
- * INSTALL
- * ───────
- * 1.  Drop this file next to index.html.
- *
- * 2.  Add before </body>:
- *       <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
- *       <script src="hillshade-cities-addon.js"></script>
- *
- * 3.  In initMap() expose the projection (see INTEGRATION.md for details):
- *       window.__coProjection = STATE.projection;   // after fitSize
- *     And same line inside the resize handler.
- *
- * OPTIONAL — call  window.__addonUpdate?.()  anywhere after updating the
- * projection for an immediate redraw (the ResizeObserver already handles
- * the window-resize case automatically).
+ * This is the key fix vs v2: hillshade is ABOVE the choropleth so multiply
+ * blending darkens the fill colors instead of blending with the background.
  */
 
 (function () {
@@ -40,12 +21,11 @@
 
   const BBOX = { lonMin: -109.05, latMin: 36.99, lonMax: -102.04, latMax: 41.01 };
 
-  // ESRI World Hillshade REST — public, no API key.
   const HILLSHADE_REST =
     "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/export";
 
-  const HILLSHADE_PX      = 1000;   // request resolution on the longer axis
-  const HILLSHADE_OPACITY = 0.40;
+  const HILLSHADE_PX      = 1200;   // request resolution (longer axis, px)
+  const HILLSHADE_OPACITY = 0.45;   // 0 = invisible, 1 = full shadow
 
   const CITY_DOT_RADIUS   = 5;
   const CITY_DOT_COLOR    = "#dc143c";
@@ -87,87 +67,90 @@
     for (const s of sels) { const el = document.querySelector(s); if (el) return el; }
     return null;
   }
-
   function readLabel(el) {
     if (!el) return null;
     if (el.tagName === "SELECT" && el.selectedOptions.length)
       return el.selectedOptions[0].text.trim();
     return (el.innerText || el.textContent || "").trim().split(/\s+/).slice(0, 5).join(" ");
   }
-
   function slug(s) {
     return (s || "unknown")
-      .replace(/[°+]/g, "")
-      .replace(/[^a-zA-Z0-9._-]/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
+      .replace(/[°+]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_")
+      .replace(/_+/g, "_").replace(/^_|_$/g, "");
   }
-
   function buildFilename() {
     const hazard   = slug(readLabel(findFirst(HAZARD_SEL)))   || "hazard";
     const scenario = slug(readLabel(findFirst(SCENARIO_SEL))) || "scenario";
-    const date     = new Date().toISOString().slice(0, 10);
-    return `Colorado_ClimateHazard_${hazard}_${scenario}_${date}.png`;
+    return `Colorado_ClimateHazard_${hazard}_${scenario}_${new Date().toISOString().slice(0,10)}.png`;
   }
 
-  /** Read the live viewBox of the choropleth SVG (tells us the D3 canvas size). */
   function getViewBox() {
     const svg = document.getElementById("choro-svg");
     if (!svg) return null;
     const vb = svg.viewBox.baseVal;
-    if (!vb || !vb.width) return null;
-    return { w: vb.width, h: vb.height };
+    return (vb && vb.width) ? { w: vb.width, h: vb.height } : null;
   }
 
-  /**
-   * Project all four BBOX corners and return the tightest bounding rectangle
-   * in SVG user-units.  Four corners handle any projection curvature.
-   */
+  /** Project all four BBOX corners → tightest screen-space rect (SVG user-units). */
   function projectedBBoxRect(proj) {
     const pts = [
-      [BBOX.lonMin, BBOX.latMin],
-      [BBOX.lonMin, BBOX.latMax],
-      [BBOX.lonMax, BBOX.latMin],
-      [BBOX.lonMax, BBOX.latMax],
+      [BBOX.lonMin, BBOX.latMin], [BBOX.lonMin, BBOX.latMax],
+      [BBOX.lonMax, BBOX.latMin], [BBOX.lonMax, BBOX.latMax],
     ].map(p => proj(p)).filter(Boolean);
-
     if (pts.length < 2) return null;
     const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-    return {
-      x: Math.min(...xs), y: Math.min(...ys),
-      w: Math.max(...xs) - Math.min(...xs),
-      h: Math.max(...ys) - Math.min(...ys),
-    };
+    return { x: Math.min(...xs), y: Math.min(...ys),
+             w: Math.max(...xs) - Math.min(...xs),
+             h: Math.max(...ys) - Math.min(...ys) };
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 1.  HILLSHADE
+   * SET UP THE Z-INDEX STACK
+   * Called once on init to lock every SVG layer into its correct position.
+   * ══════════════════════════════════════════════════════════════════════════ */
+
+  function enforceZStack() {
+    const layers = [
+      { id: "choro-svg",   z: 1 },   // choropleth fills  — bottom
+      // hillshade img sits at z:2   (inserted dynamically below)
+      { id: "outline-svg", z: 3 },   // county borders
+      // cities svg at z:4           (inserted dynamically below)
+      { id: "click-svg",   z: 5 },   // click targets     — top
+    ];
+    layers.forEach(({ id, z }) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.position = "relative";  // required for z-index to take effect on SVGs
+      el.style.zIndex   = z;
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════════
+   * 1.  HILLSHADE  (z:2 — above choropleth, multiply-blended)
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let hillshadeEl = null;
 
   function buildHillshadeUrl() {
-    // One static URL — the geographic bbox never changes.
     const aspect = (BBOX.lonMax - BBOX.lonMin) / (BBOX.latMax - BBOX.latMin);
     const pw = Math.round(HILLSHADE_PX);
     const ph = Math.round(HILLSHADE_PX / aspect);
-    const p  = new URLSearchParams({
+    return HILLSHADE_REST + "?" + new URLSearchParams({
       bbox:        `${BBOX.lonMin},${BBOX.latMin},${BBOX.lonMax},${BBOX.latMax}`,
       bboxSR:      "4326",
       imageSR:     "4326",
       size:        `${pw},${ph}`,
       format:      "png32",
       transparent: "true",
-      f:           "image",   // returns the PNG bytes directly — <img> can load it
+      f:           "image",     // returns raw PNG — <img> can display without CORS preflight
     });
-    return `${HILLSHADE_REST}?${p}`;
   }
 
-  function updateHillshadePosition(proj, vb) {
+  function positionHillshade(proj, vb) {
     if (!hillshadeEl) return;
     const r = projectedBBoxRect(proj);
     if (!r) return;
-    // Convert SVG user-unit coordinates to % of the container.
+    // Percentage positioning relative to the container — survives CSS layout changes.
     Object.assign(hillshadeEl.style, {
       left:   (r.x / vb.w * 100) + "%",
       top:    (r.y / vb.h * 100) + "%",
@@ -180,40 +163,28 @@
     if (!hillshadeEl) {
       hillshadeEl = document.createElement("img");
       hillshadeEl.id          = "hs-layer";
-      hillshadeEl.src         = buildHillshadeUrl();
+      hillshadeEl.src         = buildHillshadeUrl();  // static — bbox never changes
       hillshadeEl.crossOrigin = "anonymous";
       hillshadeEl.alt         = "";
-
       Object.assign(hillshadeEl.style, {
         position:      "absolute",
         pointerEvents: "none",
         opacity:       HILLSHADE_OPACITY,
+        // multiply: light terrain → county color unchanged; dark terrain → darkens fill.
+        // This makes ridges/valleys visible ON TOP of any choropleth color scheme.
         mixBlendMode:  "multiply",
         display:       "block",
-        zIndex:        "0",           // behind the county SVGs
+        zIndex:        "2",   // ABOVE #choro-svg (z:1), BELOW #outline-svg (z:3)
       });
-
-      // Ensure county SVGs sit on top of the hillshade image.
-      ["choro-svg", "outline-svg", "click-svg"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) { el.style.position = "relative"; el.style.zIndex = "1"; }
-      });
-
-      hillshadeEl.addEventListener("error", () =>
-        console.warn("[addon] Hillshade image failed to load. Check Network tab for details.")
-      );
-      hillshadeEl.addEventListener("load", () =>
-        console.log("[addon] Hillshade loaded ✓")
-      );
-
+      hillshadeEl.addEventListener("load",  () => console.log("[addon] Hillshade loaded ✓"));
+      hillshadeEl.addEventListener("error", () => console.warn("[addon] Hillshade image failed — check Network tab."));
       container.appendChild(hillshadeEl);
     }
-
-    updateHillshadePosition(proj, vb);
+    positionHillshade(proj, vb);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 2.  CITIES OVERLAY
+   * 2.  CITIES  (z:4 — above outline, below click targets)
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let citySvgEl = null;
@@ -225,20 +196,19 @@
       citySvgEl = document.createElementNS(NS, "svg");
       citySvgEl.id = "cities-layer";
       Object.assign(citySvgEl.style, {
-        position:      "absolute",
-        top: "0", left: "0",
+        position: "absolute", top: "0", left: "0",
         width: "100%", height: "100%",
         pointerEvents: "none",
-        zIndex:        "5",
-        overflow:      "visible",
+        zIndex: "4",
+        overflow: "visible",
       });
       document.getElementById(MAP_CONTAINER_ID).appendChild(citySvgEl);
     }
 
-    // viewBox must always match the choropleth SVG so coordinates align.
+    // Sync viewBox every call so coordinates always align with the choropleth SVG.
     citySvgEl.setAttribute("viewBox", `0 0 ${vb.w} ${vb.h}`);
 
-    // Full redraw on every call — 15 cities is trivially fast.
+    // Full redraw — 15 cities is instantaneous.
     citySvgEl.innerHTML = `
       <defs>
         <filter id="city-shadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -255,14 +225,12 @@
       const [cx, cy] = pt;
       const [dx, dy] = CITY_LABEL_OFFSET;
 
-      // white halo
       const halo = document.createElementNS(NS, "circle");
       halo.setAttribute("cx", cx); halo.setAttribute("cy", cy);
       halo.setAttribute("r", CITY_DOT_RADIUS + 2.5);
       halo.setAttribute("fill", "rgba(255,255,255,0.72)");
       g.appendChild(halo);
 
-      // coloured dot
       const dot = document.createElementNS(NS, "circle");
       dot.setAttribute("cx", cx); dot.setAttribute("cy", cy);
       dot.setAttribute("r",  CITY_DOT_RADIUS);
@@ -272,11 +240,9 @@
       dot.setAttribute("filter",       "url(#city-shadow)");
       g.appendChild(dot);
 
-      // label with white knockout stroke
       const lbl = document.createElementNS(NS, "text");
-      lbl.setAttribute("x",               cx + dx);
-      lbl.setAttribute("y",               cy + dy);
-      lbl.setAttribute("font-family",     "system-ui, -apple-system, sans-serif");
+      lbl.setAttribute("x", cx + dx); lbl.setAttribute("y", cy + dy);
+      lbl.setAttribute("font-family",     "system-ui,-apple-system,sans-serif");
       lbl.setAttribute("font-size",       CITY_LABEL_SIZE);
       lbl.setAttribute("font-weight",     "700");
       lbl.setAttribute("fill",            "#111111");
@@ -297,7 +263,6 @@
 
   function addToggles() {
     if (document.getElementById("addon-toggles")) return;
-
     const panel = document.createElement("div");
     panel.id = "addon-toggles";
     Object.assign(panel.style, {
@@ -307,10 +272,9 @@
       borderRadius: "10px", padding: "10px 14px",
       boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
       fontSize: "12px", color: "#e2e8f0",
-      fontFamily: "system-ui, sans-serif", userSelect: "none",
+      fontFamily: "system-ui,sans-serif", userSelect: "none",
     });
-
-    const makeRow = (labelText, id) => {
+    const makeRow = (text, id) => {
       const lbl = document.createElement("label");
       Object.assign(lbl.style, { display:"flex", alignItems:"center", gap:"8px", cursor:"pointer" });
       const cb = document.createElement("input");
@@ -319,14 +283,10 @@
         const el = document.getElementById(id);
         if (el) el.style.display = cb.checked ? "" : "none";
       });
-      lbl.append(cb, document.createTextNode(labelText));
+      lbl.append(cb, document.createTextNode(text));
       return lbl;
     };
-
-    panel.append(
-      makeRow("🏔  Hillshade", "hs-layer"),
-      makeRow("📍  Cities",    "cities-layer"),
-    );
+    panel.append(makeRow("🏔  Hillshade", "hs-layer"), makeRow("📍  Cities", "cities-layer"));
     document.body.appendChild(panel);
   }
 
@@ -336,79 +296,62 @@
 
   function addPngButton() {
     if (document.getElementById("png-dl-btn")) return;
-
     const style = document.createElement("style");
     style.textContent = `
       #png-dl-btn {
         position:fixed; bottom:24px; right:24px; z-index:9000;
-        display:flex; align-items:center; gap:8px;
-        padding:11px 20px;
+        display:flex; align-items:center; gap:8px; padding:11px 20px;
         background:linear-gradient(135deg,#1e40af,#2563eb);
         color:#fff; border:none; border-radius:10px;
         font-size:14px; font-weight:700; font-family:system-ui,sans-serif;
         cursor:pointer; letter-spacing:.02em;
         box-shadow:0 4px 16px rgba(37,99,235,.45);
-        transition:opacity .15s, transform .15s, box-shadow .15s;
+        transition:opacity .15s,transform .15s,box-shadow .15s;
       }
-      #png-dl-btn:hover  { opacity:.9; transform:translateY(-2px); box-shadow:0 8px 24px rgba(37,99,235,.5); }
+      #png-dl-btn:hover  { opacity:.9; transform:translateY(-2px); }
       #png-dl-btn:active { transform:translateY(0); }
       #png-dl-btn:disabled { opacity:.5; cursor:wait; transform:none; }
     `;
     document.head.appendChild(style);
-
     const btn = document.createElement("button");
     btn.id = "png-dl-btn";
     btn.innerHTML = `<span>🖼</span><span class="btn-txt"> Download Map PNG</span>`;
-
     btn.addEventListener("click", async () => {
       const container = document.getElementById(MAP_CONTAINER_ID);
-      if (!container) { alert("Map container '#" + MAP_CONTAINER_ID + "' not found."); return; }
-
+      if (!container) { alert("Map container not found."); return; }
       btn.disabled = true;
       btn.querySelector(".btn-txt").textContent = " Generating…";
-
       try {
         const canvas = await html2canvas(container, {
-          useCORS:   true,
-          allowTaint: false,
-          scale:      2,
-          logging:    false,
-          ignoreElements: el =>
-            el.id === "png-dl-btn" || el.id === "addon-toggles",
+          useCORS: true, allowTaint: false, scale: 2, logging: false,
+          ignoreElements: el => el.id === "png-dl-btn" || el.id === "addon-toggles",
         });
-
-        const a    = document.createElement("a");
-        a.href     = canvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
         a.download = buildFilename();
         a.click();
-        console.log("[addon] PNG saved:", a.download);
       } catch (err) {
         console.error("[addon] PNG export failed:", err);
-        alert("PNG export failed — see browser console for details.\n\n" + err.message);
+        alert("PNG export failed — see console.\n\n" + err.message);
       } finally {
         btn.disabled = false;
         btn.querySelector(".btn-txt").textContent = " Download Map PNG";
       }
     });
-
     document.body.appendChild(btn);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 5.  MASTER UPDATE  — exposed globally for manual calls
+   * 5.  MASTER UPDATE
    * ══════════════════════════════════════════════════════════════════════════ */
 
   function update() {
     const proj = window.__coProjection;
     if (typeof proj !== "function") return;
-
     const vb = getViewBox();
     if (!vb) return;
-
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (!container) return;
-
-    // Make the container a CSS stacking context if it isn't already.
     if (getComputedStyle(container).position === "static")
       container.style.position = "relative";
 
@@ -416,7 +359,7 @@
     drawCities(proj, vb);
   }
 
-  // Call this from your resize handler for instant response:
+  // Call this from your resize handler for zero-delay response:
   //   window.__addonUpdate?.();
   window.__addonUpdate = update;
 
@@ -433,29 +376,25 @@
     });
   }
 
-  function waitForMap(intervalMs = 250, maxWaitMs = 30000) {
+  function waitForMap(ms = 250, limit = 120) {
     return new Promise((resolve, reject) => {
-      const deadline = Date.now() + maxWaitMs;
+      let n = 0;
       const t = setInterval(() => {
         if (getViewBox() && typeof window.__coProjection === "function") {
           clearInterval(t); resolve();
-        } else if (Date.now() > deadline) {
+        } else if (++n > limit) {
           clearInterval(t);
           reject(new Error(
-            "[addon] Timed out waiting for map + projection.\n" +
-            "Make sure  window.__coProjection = STATE.projection  is set inside initMap()."
+            "[addon] Timed out. Make sure  window.__coProjection = STATE.projection  is set in initMap()."
           ));
         }
-      }, intervalMs);
+      }, ms);
     });
   }
 
   async function bootstrap() {
-    if (typeof html2canvas === "undefined") {
-      await loadScript(
-        "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
-      );
-    }
+    if (typeof html2canvas === "undefined")
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
 
     addToggles();
     addPngButton();
@@ -463,21 +402,18 @@
     try {
       await waitForMap();
     } catch (e) {
-      console.error(e.message);
-      return;
+      console.error(e.message); return;
     }
 
+    enforceZStack();   // lock SVG layers into correct stacking order
     update();
 
-    // ResizeObserver — fires whenever #center changes size.
-    // 80 ms debounce lets D3's resize handler (fitSize → projection update) run first.
+    // ResizeObserver: 80 ms debounce lets D3's resize handler (fitSize) run first.
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (container && typeof ResizeObserver !== "undefined") {
       let timer;
-      new ResizeObserver(() => {
-        clearTimeout(timer);
-        timer = setTimeout(update, 80);
-      }).observe(container);
+      new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(update, 80); })
+        .observe(container);
     }
   }
 
