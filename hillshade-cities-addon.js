@@ -1,45 +1,35 @@
 /**
- * hillshade-cities-addon.js  (v5)
+ * hillshade-cities-addon.js  (v6)
  * ─────────────────────────────────────────────────────────────────────────────
- * Changes from v4:
+ * Works with the original d3.geoAlbers() projection in initMap().
  *
- *  1. PNG export excludes the legend (add/edit LEGEND_SELECTORS below if yours
- *     has a different id/class).
- *
- *  2. Hillshade is composited correctly in the PNG via canvas 2D multiply
- *     blending — html2canvas does not support mix-blend-mode, so the old
- *     approach washed out the choropleth.  The new export:
- *       a) hides the hillshade and screenshots everything else
- *       b) draws the hillshade onto the canvas with globalCompositeOperation
- *          = "multiply" at the correct position and opacity
- *
- * PROJECTION — switch to d3.geoMercator() for a true rectangle
- * ─────────────────────────────────────────────────────────────
- * Mercator has straight horizontal lat lines, so Colorado's borders (which are
- * lines of constant lat/lon) appear as perfect straight edges.
- *
- * In initMap() replace the entire d3.geoAlbers() block with:
- *
- *   STATE.projection = d3.geoMercator()
- *       .fitSize([w, h], STATE.countyGeo);
- *
- * In the resize handler replace the chained calls with:
- *
- *   STATE.projection.fitSize([w2, h2], STATE.countyGeo);
- *
- * (No .rotate / .center / .parallels — Mercator + fitSize handles everything.)
+ * FIXES vs previous versions:
+ *   - Hillshade is appended as the LAST child of #center, not inserted between
+ *     SVGs. Inserting between SVGs displaced the TIFF canvas and hid raw data.
+ *     Appending last keeps the TIFF canvas undisturbed; pointer-events:none
+ *     lets all clicks pass through to #click-svg beneath.
+ *   - Cities appended after hillshade (topmost layer).
+ *   - PNG export: legend elements are excluded; hillshade is hidden during the
+ *     html2canvas pass then re-composited with ctx.globalCompositeOperation =
+ *     "multiply" so the exported image matches the screen (html2canvas does not
+ *     support mix-blend-mode).
  *
  * INSTALL
  * ───────
- * 1. Drop this file next to index.html.
+ * 1. Drop next to index.html.
  * 2. Add before </body>:
  *      <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
  *      <script src="hillshade-cities-addon.js"></script>
- * 3. In initMap(), after fitSize:
+ * 3. In initMap(), add after the .fitSize() line — BOTH in the initial block
+ *    AND inside the resize handler:
  *      window.__coProjection = STATE.projection;
- *    Same line inside the resize handler.
- * 4. Optional — for instant city/hillshade update at end of resize handler:
+ * 4. Optional: at the very end of the resize handler for instant refresh:
  *      window.__addonUpdate?.();
+ *
+ * LEGEND EXCLUSION
+ * ────────────────
+ * If your legend still appears in the PNG, right-click it in DevTools, copy
+ * its id or class, and add it to EXCLUDE_SELECTORS below.
  */
 
 (function () {
@@ -49,37 +39,41 @@
    * CONFIG
    * ══════════════════════════════════════════════════════════════════════════ */
 
+  // Colorado bounding box — WGS-84
   const BBOX = { lonMin: -109.05, latMin: 36.99, lonMax: -102.04, latMax: 41.01 };
 
+  // ESRI World Hillshade (public, no API key needed)
   const HILLSHADE_REST =
     "https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/export";
 
-  const HILLSHADE_PX      = 1200;  // request resolution on longer axis
-  const HILLSHADE_OPACITY = 0.45;  // on-screen opacity (also used in PNG composite)
+  const HILLSHADE_PX      = 1200;   // request resolution (longer axis)
+  const HILLSHADE_OPACITY = 0.45;   // 0 = invisible, 1 = full terrain shadow
 
   const CITY_DOT_RADIUS   = 5;
   const CITY_DOT_COLOR    = "#dc143c";
   const CITY_LABEL_SIZE   = 11;
-  const CITY_LABEL_OFFSET = [8, 4];
+  const CITY_LABEL_OFFSET = [8, 4]; // [dx, dy] in SVG user-units
 
-  const MAP_CONTAINER_ID = "center";
+  const MAP_CONTAINER_ID  = "center";
 
-  // ── Selectors for elements to EXCLUDE from the PNG ──────────────────────
-  // Edit these if your legend has a different id or class.
-  const LEGEND_SELECTORS = [
-    "#legend", ".legend", "[id*='legend']", "[class*='legend']",
-    "#color-scale", ".color-scale", "#colorbar", ".colorbar",
-    "#color-ramp", ".color-ramp",
+  // Elements hidden during PNG export. Add your legend's selector here.
+  const EXCLUDE_SELECTORS = [
+    "#png-dl-btn",
+    "#addon-toggles",
+    "#legend", ".legend",
+    "[id*='legend']", "[class*='legend']",
+    "#color-scale", ".color-scale",
+    "#colorbar", ".colorbar",
+    ".map-legend", "#map-legend",
+    ".scale-bar", "#scale-bar",
     "[id*='color-scale']", "[class*='color-scale']",
-    // The dashboard's specific value/opacity UI strip
-    ".map-legend", "#map-legend", ".scale-bar", "#scale-bar",
   ];
 
   const HAZARD_SEL   = ["#hazard-select",   "[data-hazard]",   ".hazard-label",   "select:first-of-type"];
   const SCENARIO_SEL = ["#scenario-select", "[data-scenario]", ".scenario-label", "select:nth-of-type(2)"];
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * CITY DATA
+   * CITY DATA  (matches cities_of_interest.shp row order)
    * ══════════════════════════════════════════════════════════════════════════ */
 
   const CITIES = [
@@ -105,24 +99,33 @@
    * ══════════════════════════════════════════════════════════════════════════ */
 
   function findFirst(sels) {
-    for (const s of sels) { const el = document.querySelector(s); if (el) return el; }
+    for (const s of sels) {
+      const el = document.querySelector(s);
+      if (el) return el;
+    }
     return null;
   }
+
   function readLabel(el) {
     if (!el) return null;
     if (el.tagName === "SELECT" && el.selectedOptions.length)
       return el.selectedOptions[0].text.trim();
     return (el.innerText || el.textContent || "").trim().split(/\s+/).slice(0, 5).join(" ");
   }
+
   function slug(s) {
     return (s || "unknown")
-      .replace(/[°+]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_")
-      .replace(/_+/g, "_").replace(/^_|_$/g, "");
+      .replace(/[°+]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
   }
+
   function buildFilename() {
     const hazard   = slug(readLabel(findFirst(HAZARD_SEL)))   || "hazard";
     const scenario = slug(readLabel(findFirst(SCENARIO_SEL))) || "scenario";
-    return `Colorado_ClimateHazard_${hazard}_${scenario}_${new Date().toISOString().slice(0, 10)}.png`;
+    const date     = new Date().toISOString().slice(0, 10);
+    return `Colorado_ClimateHazard_${hazard}_${scenario}_${date}.png`;
   }
 
   function getViewBox() {
@@ -132,29 +135,38 @@
     return (vb && vb.width) ? { w: vb.width, h: vb.height } : null;
   }
 
+  // Project all four corners of the geo bbox to get the tightest SVG rect.
   function projectedBBoxRect(proj) {
     const pts = [
-      [BBOX.lonMin, BBOX.latMin], [BBOX.lonMin, BBOX.latMax],
-      [BBOX.lonMax, BBOX.latMin], [BBOX.lonMax, BBOX.latMax],
+      [BBOX.lonMin, BBOX.latMin],
+      [BBOX.lonMin, BBOX.latMax],
+      [BBOX.lonMax, BBOX.latMin],
+      [BBOX.lonMax, BBOX.latMax],
     ].map(p => proj(p)).filter(Boolean);
     if (pts.length < 2) return null;
-    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const xs = pts.map(p => p[0]);
+    const ys = pts.map(p => p[1]);
     return {
-      x: Math.min(...xs), y: Math.min(...ys),
+      x: Math.min(...xs),
+      y: Math.min(...ys),
       w: Math.max(...xs) - Math.min(...xs),
       h: Math.max(...ys) - Math.min(...ys),
     };
   }
 
-  /** Returns true if el matches any of the legend selectors. */
-  function isLegend(el) {
-    return LEGEND_SELECTORS.some(sel => {
-      try { return el.matches(sel); } catch { return false; }
+  function isExcluded(el) {
+    return EXCLUDE_SELECTORS.some(s => {
+      try { return el.matches(s); } catch { return false; }
     });
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
    * 1.  HILLSHADE
+   *
+   * Appended as the LAST child of #center before the cities SVG.
+   * This means it floats above all county SVGs AND the TIFF canvas — but
+   * pointer-events:none lets clicks pass straight through to #click-svg.
+   * mix-blend-mode:multiply darkens the choropleth (and raw raster if active).
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let hillshadeEl = null;
@@ -176,6 +188,7 @@
     if (!hillshadeEl) return;
     const r = projectedBBoxRect(proj);
     if (!r) return;
+    // % positioning so it survives container resizes without a redraw.
     Object.assign(hillshadeEl.style, {
       left:   (r.x / vb.w * 100) + "%",
       top:    (r.y / vb.h * 100) + "%",
@@ -188,53 +201,57 @@
     if (!hillshadeEl) {
       hillshadeEl = document.createElement("img");
       hillshadeEl.id          = "hs-layer";
-      hillshadeEl.src         = buildHillshadeUrl();
+      hillshadeEl.src         = buildHillshadeUrl(); // static URL — bbox never changes
       hillshadeEl.crossOrigin = "anonymous";
       hillshadeEl.alt         = "";
       Object.assign(hillshadeEl.style, {
         position:      "absolute",
         pointerEvents: "none",
         opacity:       HILLSHADE_OPACITY,
-        mixBlendMode:  "multiply",  // correct on-screen; handled separately in PNG export
+        mixBlendMode:  "multiply",
         display:       "block",
       });
-      hillshadeEl.addEventListener("load",  () => console.log("[addon] Hillshade loaded ✓"));
-      hillshadeEl.addEventListener("error", () => console.warn("[addon] Hillshade failed — check Network tab."));
+      hillshadeEl.addEventListener("load",
+        () => console.log("[addon] Hillshade loaded ✓"));
+      hillshadeEl.addEventListener("error",
+        () => console.warn("[addon] Hillshade failed — check Network tab."));
 
-      // DOM insertion order = visual stacking. Insert after #choro-svg (fills)
-      // so hillshade sits above fills but below #outline-svg (borders).
-      const choroSvg = document.getElementById("choro-svg");
-      choroSvg
-        ? choroSvg.parentNode.insertBefore(hillshadeEl, choroSvg.nextSibling)
-        : container.appendChild(hillshadeEl);
+      container.appendChild(hillshadeEl); // appended last; cities come after
     }
     positionHillshade(proj, vb);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
    * 2.  CITIES
+   *
+   * Appended after hillshade. viewBox is resynced every call so dots scale
+   * correctly when the window is resized (projection + viewBox both change).
    * ══════════════════════════════════════════════════════════════════════════ */
 
   let citySvgEl = null;
 
   function drawCities(proj, vb) {
     const NS = "http://www.w3.org/2000/svg";
+
     if (!citySvgEl) {
       citySvgEl = document.createElementNS(NS, "svg");
       citySvgEl.id = "cities-layer";
       Object.assign(citySvgEl.style, {
-        position: "absolute", top: "0", left: "0",
-        width: "100%", height: "100%",
-        pointerEvents: "none", overflow: "visible",
+        position:      "absolute",
+        top:           "0",
+        left:          "0",
+        width:         "100%",
+        height:        "100%",
+        pointerEvents: "none",
+        overflow:      "visible",
       });
-      // Insert after #outline-svg — above borders, below click targets.
-      const outlineSvg = document.getElementById("outline-svg");
-      outlineSvg
-        ? outlineSvg.parentNode.insertBefore(citySvgEl, outlineSvg.nextSibling)
-        : document.getElementById(MAP_CONTAINER_ID).appendChild(citySvgEl);
+      document.getElementById(MAP_CONTAINER_ID).appendChild(citySvgEl);
     }
 
+    // MUST resync viewBox every call — it changes when the map resizes.
     citySvgEl.setAttribute("viewBox", `0 0 ${vb.w} ${vb.h}`);
+
+    // Full redraw on every call (15 cities = trivially fast).
     citySvgEl.innerHTML = `
       <defs>
         <filter id="city-shadow" x="-50%" y="-50%" width="200%" height="200%">
@@ -244,29 +261,36 @@
       </defs>`;
 
     const g = document.createElementNS(NS, "g");
+
     CITIES.forEach(city => {
       const pt = proj([city.lon, city.lat]);
       if (!pt || isNaN(pt[0])) return;
       const [cx, cy] = pt;
       const [dx, dy] = CITY_LABEL_OFFSET;
 
+      // white halo so dot is readable over dark terrain
       const halo = document.createElementNS(NS, "circle");
-      halo.setAttribute("cx", cx); halo.setAttribute("cy", cy);
-      halo.setAttribute("r", CITY_DOT_RADIUS + 2.5);
+      halo.setAttribute("cx",   cx);
+      halo.setAttribute("cy",   cy);
+      halo.setAttribute("r",    CITY_DOT_RADIUS + 2.5);
       halo.setAttribute("fill", "rgba(255,255,255,0.72)");
       g.appendChild(halo);
 
+      // coloured dot
       const dot = document.createElementNS(NS, "circle");
-      dot.setAttribute("cx", cx); dot.setAttribute("cy", cy);
-      dot.setAttribute("r",  CITY_DOT_RADIUS);
+      dot.setAttribute("cx",           cx);
+      dot.setAttribute("cy",           cy);
+      dot.setAttribute("r",            CITY_DOT_RADIUS);
       dot.setAttribute("fill",         CITY_DOT_COLOR);
       dot.setAttribute("stroke",       "#fff");
       dot.setAttribute("stroke-width", "1.6");
       dot.setAttribute("filter",       "url(#city-shadow)");
       g.appendChild(dot);
 
+      // label with white knockout stroke
       const lbl = document.createElementNS(NS, "text");
-      lbl.setAttribute("x", cx + dx); lbl.setAttribute("y", cy + dy);
+      lbl.setAttribute("x",               cx + dx);
+      lbl.setAttribute("y",               cy + dy);
       lbl.setAttribute("font-family",     "system-ui,-apple-system,sans-serif");
       lbl.setAttribute("font-size",       CITY_LABEL_SIZE);
       lbl.setAttribute("font-weight",     "700");
@@ -278,6 +302,7 @@
       lbl.textContent = city.name;
       g.appendChild(lbl);
     });
+
     citySvgEl.appendChild(g);
   }
 
@@ -290,104 +315,112 @@
     const panel = document.createElement("div");
     panel.id = "addon-toggles";
     Object.assign(panel.style, {
-      position: "fixed", top: "60px", right: "16px", zIndex: "9000",
-      display: "flex", flexDirection: "column", gap: "6px",
-      background: "rgba(15,23,42,0.85)", backdropFilter: "blur(6px)",
-      borderRadius: "10px", padding: "10px 14px",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-      fontSize: "12px", color: "#e2e8f0",
-      fontFamily: "system-ui,sans-serif", userSelect: "none",
+      position:       "fixed",
+      top:            "60px",
+      right:          "16px",
+      zIndex:         "9000",
+      display:        "flex",
+      flexDirection:  "column",
+      gap:            "6px",
+      background:     "rgba(15,23,42,0.85)",
+      backdropFilter: "blur(6px)",
+      borderRadius:   "10px",
+      padding:        "10px 14px",
+      boxShadow:      "0 4px 20px rgba(0,0,0,0.4)",
+      fontSize:       "12px",
+      color:          "#e2e8f0",
+      fontFamily:     "system-ui,sans-serif",
+      userSelect:     "none",
     });
-    const makeRow = (text, id) => {
+
+    const makeRow = (text, targetId) => {
       const lbl = document.createElement("label");
-      Object.assign(lbl.style, { display:"flex", alignItems:"center", gap:"8px", cursor:"pointer" });
+      Object.assign(lbl.style, {
+        display: "flex", alignItems: "center", gap: "8px", cursor: "pointer",
+      });
       const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.checked = true; cb.style.accentColor = "#60a5fa";
+      cb.type    = "checkbox";
+      cb.checked = true;
+      cb.style.accentColor = "#60a5fa";
       cb.addEventListener("change", () => {
-        const el = document.getElementById(id);
+        const el = document.getElementById(targetId);
         if (el) el.style.display = cb.checked ? "" : "none";
       });
       lbl.append(cb, document.createTextNode(text));
       return lbl;
     };
-    panel.append(makeRow("🏔  Hillshade", "hs-layer"), makeRow("📍  Cities", "cities-layer"));
+
+    panel.append(
+      makeRow("🏔  Hillshade", "hs-layer"),
+      makeRow("📍  Cities",    "cities-layer"),
+    );
     document.body.appendChild(panel);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 4.  PNG EXPORT  — canvas multiply composite for correct hillshade blend
+   * 4.  PNG EXPORT
    *
-   * html2canvas ignores mix-blend-mode, so if we let it render the hillshade
-   * the grey tones overlay the county fills opaquely and wash them out.
-   * Instead we:
-   *   1. Hide the hillshade <img> and screenshot the rest normally.
-   *   2. Draw the base canvas onto an output canvas.
-   *   3. Draw the hillshade image onto the output canvas using
-   *      globalCompositeOperation = "multiply" — exactly as it looks on screen.
+   * html2canvas does not support mix-blend-mode, so if the hillshade is
+   * visible during the screenshot it renders as a flat grey overlay that
+   * washes out the county colours.  Fix:
+   *   a) Hide the hillshade, take the screenshot (counties + cities + TIFF).
+   *   b) Draw the base screenshot onto an output canvas.
+   *   c) Re-draw the hillshade with globalCompositeOperation="multiply" so
+   *      the blending matches what you see on screen.
    * ══════════════════════════════════════════════════════════════════════════ */
 
   async function captureMapCanvas(container) {
-    // 1. Hide hillshade so html2canvas doesn't include it.
+    // a) Hide hillshade so html2canvas doesn't flatten it incorrectly.
     if (hillshadeEl) hillshadeEl.style.visibility = "hidden";
 
     let baseCanvas;
     try {
       baseCanvas = await html2canvas(container, {
-        useCORS:    true,
-        allowTaint: false,
-        scale:      2,
-        logging:    false,
-        ignoreElements: el =>
-          el.id === "png-dl-btn"    ||
-          el.id === "addon-toggles" ||
-          isLegend(el),
+        useCORS:        true,
+        allowTaint:     false,
+        scale:          2,
+        logging:        false,
+        ignoreElements: isExcluded,
       });
     } finally {
-      // Always restore, even if html2canvas throws.
+      // Always restore visibility even if html2canvas throws.
       if (hillshadeEl) hillshadeEl.style.visibility = "";
     }
 
-    // 2. Create output canvas same size as the base screenshot.
+    // b) Paint base onto output canvas.
     const out = document.createElement("canvas");
     out.width  = baseCanvas.width;
     out.height = baseCanvas.height;
     const ctx  = out.getContext("2d");
-
-    // 3. Draw the base map (counties, borders, cities).
     ctx.drawImage(baseCanvas, 0, 0);
 
-    // 4. Composite the hillshade with multiply blend mode.
-    //    This replicates mix-blend-mode: multiply exactly.
-    const proj = window.__coProjection;
-    const vb   = getViewBox();
-    const r    = (proj && vb) ? projectedBBoxRect(proj) : null;
-
+    // c) Composite hillshade with multiply.
+    const proj    = window.__coProjection;
+    const vb      = getViewBox();
+    const r       = (proj && vb) ? projectedBBoxRect(proj) : null;
     const hsReady = hillshadeEl &&
                     hillshadeEl.complete &&
                     hillshadeEl.naturalWidth > 0;
 
     if (r && hsReady) {
-      // Convert SVG user-unit rect → canvas pixel rect.
-      // The screenshot is at scale:2 and covers the full container,
-      // so we need to map SVG coords → container-% → canvas px.
-      const containerW = container.clientWidth  || container.offsetWidth;
-      const containerH = container.clientHeight || container.offsetHeight;
-
-      const pxPerSvgX = (out.width  / containerW) * (containerW / vb.w);
-      const pxPerSvgY = (out.height / containerH) * (containerH / vb.h);
-
-      const cx = r.x * pxPerSvgX;
-      const cy = r.y * pxPerSvgY;
-      const cw = r.w * pxPerSvgX;
-      const ch = r.h * pxPerSvgY;
+      // SVG user-unit coords → output canvas pixels.
+      // out.width = container.clientWidth * scale(2), so:
+      const scaleX = out.width  / vb.w;
+      const scaleY = out.height / vb.h;
 
       ctx.save();
-      ctx.globalAlpha = HILLSHADE_OPACITY;
+      ctx.globalAlpha              = HILLSHADE_OPACITY;
       ctx.globalCompositeOperation = "multiply";
-      ctx.drawImage(hillshadeEl, cx, cy, cw, ch);
+      ctx.drawImage(
+        hillshadeEl,
+        r.x * scaleX,
+        r.y * scaleY,
+        r.w * scaleX,
+        r.h * scaleY,
+      );
       ctx.restore();
     } else if (!hsReady) {
-      console.warn("[addon] Hillshade image not yet loaded — PNG will not include hillshade.");
+      console.warn("[addon] Hillshade not yet loaded — PNG will skip terrain layer.");
     }
 
     return out;
@@ -395,66 +428,82 @@
 
   function addPngButton() {
     if (document.getElementById("png-dl-btn")) return;
+
     const style = document.createElement("style");
     style.textContent = `
       #png-dl-btn {
-        position:fixed; bottom:24px; right:24px; z-index:9000;
-        display:flex; align-items:center; gap:8px; padding:11px 20px;
-        background:linear-gradient(135deg,#1e40af,#2563eb);
-        color:#fff; border:none; border-radius:10px;
-        font-size:14px; font-weight:700; font-family:system-ui,sans-serif;
-        cursor:pointer; letter-spacing:.02em;
-        box-shadow:0 4px 16px rgba(37,99,235,.45);
-        transition:opacity .15s,transform .15s;
+        position: fixed; bottom: 24px; right: 24px; z-index: 9000;
+        display: flex; align-items: center; gap: 8px;
+        padding: 11px 20px;
+        background: linear-gradient(135deg, #1e40af, #2563eb);
+        color: #fff; border: none; border-radius: 10px;
+        font-size: 14px; font-weight: 700;
+        font-family: system-ui, sans-serif;
+        cursor: pointer; letter-spacing: .02em;
+        box-shadow: 0 4px 16px rgba(37,99,235,.45);
+        transition: opacity .15s, transform .15s;
       }
-      #png-dl-btn:hover   { opacity:.9; transform:translateY(-2px); }
-      #png-dl-btn:active  { transform:translateY(0); }
-      #png-dl-btn:disabled{ opacity:.5; cursor:wait; transform:none; }
+      #png-dl-btn:hover    { opacity: .9; transform: translateY(-2px); }
+      #png-dl-btn:active   { transform: translateY(0); }
+      #png-dl-btn:disabled { opacity: .5; cursor: wait; transform: none; }
     `;
     document.head.appendChild(style);
 
     const btn = document.createElement("button");
     btn.id = "png-dl-btn";
     btn.innerHTML = `<span>🖼</span><span class="btn-txt"> Download Map PNG</span>`;
+
     btn.addEventListener("click", async () => {
       const container = document.getElementById(MAP_CONTAINER_ID);
       if (!container) { alert("Map container not found."); return; }
+
       btn.disabled = true;
       btn.querySelector(".btn-txt").textContent = " Generating…";
+
       try {
         const canvas = await captureMapCanvas(container);
-        const a = document.createElement("a");
-        a.href     = canvas.toDataURL("image/png");
-        a.download = buildFilename();
+        const a      = document.createElement("a");
+        a.href       = canvas.toDataURL("image/png");
+        a.download   = buildFilename();
         a.click();
+        console.log("[addon] PNG saved:", a.download);
       } catch (err) {
         console.error("[addon] PNG export failed:", err);
-        alert("PNG export failed — see browser console.\n\n" + err.message);
+        alert("PNG export failed — see console.\n\n" + err.message);
       } finally {
         btn.disabled = false;
         btn.querySelector(".btn-txt").textContent = " Download Map PNG";
       }
     });
+
     document.body.appendChild(btn);
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-   * 5.  MASTER UPDATE
+   * 5.  MASTER UPDATE  — re-positions hillshade + redraws cities
    * ══════════════════════════════════════════════════════════════════════════ */
 
   function update() {
     const proj = window.__coProjection;
-    if (typeof proj !== "function") return;
+    if (typeof proj !== "function") {
+      console.warn("[addon] window.__coProjection not set yet — skipping update.");
+      return;
+    }
     const vb = getViewBox();
     if (!vb) return;
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (!container) return;
+
+    // Ensure container is a CSS stacking context (required for absolute children).
     if (getComputedStyle(container).position === "static")
       container.style.position = "relative";
+
     initHillshade(proj, vb, container);
     drawCities(proj, vb);
   }
 
+  // Exposed globally — call from your resize handler for zero-delay refresh:
+  //   window.__addonUpdate?.();
   window.__addonUpdate = update;
 
   /* ══════════════════════════════════════════════════════════════════════════
@@ -464,42 +513,61 @@
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-      const s = document.createElement("script");
-      s.src = src; s.onload = resolve; s.onerror = reject;
+      const s    = document.createElement("script");
+      s.src      = src;
+      s.onload   = resolve;
+      s.onerror  = reject;
       document.head.appendChild(s);
     });
   }
 
-  function waitForMap(ms = 250, limit = 120) {
+  // Wait until choro-svg has a non-zero viewBox AND __coProjection is a function.
+  function waitForMap(intervalMs = 250, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
-      let n = 0;
+      const deadline = Date.now() + timeoutMs;
       const t = setInterval(() => {
         if (getViewBox() && typeof window.__coProjection === "function") {
-          clearInterval(t); resolve();
-        } else if (++n > limit) {
           clearInterval(t);
-          reject(new Error("[addon] Timed out — set window.__coProjection = STATE.projection in initMap()."));
+          resolve();
+        } else if (Date.now() > deadline) {
+          clearInterval(t);
+          reject(new Error(
+            "[addon] Timed out waiting for map.\n" +
+            "Make sure  window.__coProjection = STATE.projection  is set in initMap()."
+          ));
         }
-      }, ms);
+      }, intervalMs);
     });
   }
 
   async function bootstrap() {
-    if (typeof html2canvas === "undefined")
-      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js");
+    if (typeof html2canvas === "undefined") {
+      await loadScript(
+        "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+      );
+    }
 
     addToggles();
     addPngButton();
 
-    try { await waitForMap(); } catch (e) { console.error(e.message); return; }
+    try {
+      await waitForMap();
+    } catch (e) {
+      console.error(e.message);
+      return;
+    }
 
     update();
 
+    // ResizeObserver: 80 ms debounce lets D3's resize handler run first,
+    // so fitSize + window.__coProjection are both updated before we redraw.
     const container = document.getElementById(MAP_CONTAINER_ID);
     if (container && typeof ResizeObserver !== "undefined") {
-      let timer;
-      new ResizeObserver(() => { clearTimeout(timer); timer = setTimeout(update, 80); })
-        .observe(container);
+      let debounce;
+      new ResizeObserver(() => {
+        clearTimeout(debounce);
+        debounce = setTimeout(update, 80);
+      }).observe(container);
     }
   }
 
