@@ -590,11 +590,8 @@ function initMap(){
   const h=el.offsetHeight||window.innerHeight-52;
   // Colorado-specific Albers Equal Area — removes the tilt from geoAlbersUsa
   // Standard parallels and central meridian tuned for Colorado's bounding box
-  STATE.projection=d3.geoAlbers()
-    .rotate([105.55, 0])
-    .center([0, 39.0])
-    .parallels([37.5, 40.5])
-    .fitSize([w,h],STATE.countyGeo);
+  STATE.projection = d3.geoMercator()
+    .fitSize([w, h], STATE.countyGeo);
   STATE.geoPath=d3.geoPath(STATE.projection);
 
   window.__coProjection = STATE.projection;
@@ -622,11 +619,7 @@ function initMap(){
 
   window.addEventListener("resize",()=>{
     const w2=el.clientWidth, h2=el.clientHeight;
-    STATE.projection
-      .rotate([105.55, 0])
-      .center([0, 39.0])
-      .parallels([37.5, 40.5])
-      .fitSize([w2,h2],STATE.countyGeo);
+    STATE.projection.fitSize([w2,h2],STATE.countyGeo);
     STATE.geoPath=d3.geoPath(STATE.projection);
 
     window.__coProjection = STATE.projection;
